@@ -109,7 +109,7 @@ vector<float> WienerMilstein::compute_noise(const vector<float> &x_i,float* h){
     vector<float> noise_out(x_i.size(),0.0);
 
     for(size_t i=0;i<x_i.size();i++){
-        float dW{distribution(eng)*sqrt(*h)};
+        float dW = distribution(eng)*sqrt(*h);
 
         noise_out[i] = dW + (0.5f)*(D_g(x_i)[i])*(dW*dW-*h);
     }
@@ -305,6 +305,87 @@ vector<vector<float>> SDE_SS_System::simulateTrajectory(const vector<float> &x0,
     return output;
 }
 
+//This function will automatically produce a group of the trajectories to obtain the value in a time instant. 
+//It requires, in order,:
+//- The period, the step size and the number of trajectories (MANDATORY).
+//- A bool to say if the initial condition are random (DEFAULT = false = non random initial conditions).
+//- If the initial conditions are not random, a vector of  valid initial condition vectors is necessary.
+//  It should have as many initial condition points as Nsim.
+//- If they are random, a function to compute the initial condition is required. This function has to be
+//  a zero argument - returning vector<float> function.
+//- Eventually, a time index where the PDF has to be computed. If it is not given, the PDF will be computed
+//  at the last step.
+//The output of the function will be a 2D matrix with the values of each trajectory at the time instant in each row.     
+vector<vector<float>> SDE_SS_System::produceTimePicture(float period,float h_0,unsigned int Nsim,
+                                                        bool random_initial,const vector<vector<float>> &x0 ,
+                                                        function<vector<float>()> random_f,float time_instant)
+{
+    //1. Perform some checks on the arguments:
+    checkFunctionComputeTimePicture(Nsim,random_initial,x0,random_f);
+
+    //2. Now we can start to produce the simulations and extract the points.
+    //We will work using OpenMP to optimize the performances.
+    vector<vector<float>> picture;
+
+    //2.1 Assign at each threads its quota. The master will have also the remainder
+    vector<unsigned int> quota(NumThreads,0);
+    vector<unsigned int> cumulative_quota(NumThreads,0); //Used for initial conditions
+
+    quota[0] = (Nsim / NumThreads) + (Nsim % NumThreads);
+    cumulative_quota[0] = 0;
+    for(size_t i=1;i<NumThreads;i++){
+        quota[i] = Nsim / NumThreads;
+        cumulative_quota[i] += quota[i-1] + cumulative_quota[i-1];
+    }
+
+    #pragma omp parallel num_threads(NumThreads)
+    {
+        const unsigned int ID = omp_get_thread_num(); //Get thread ID
+
+        //2.2 We create the local storaging thus each thread can 
+        vector<vector<float>> local_picture(quota[ID],vector<float>(size+1,0.0));
+
+        //2.3 Start to produce the trajectories
+        for(size_t i=0;i<quota[ID];i++){
+
+            //2.3.1: We need to produce the initial condition
+            vector<float> init;
+            if(random_initial){ //random initial condition
+                init = random_f();
+            }
+            else{ //non random initial condition
+                init = x0[cumulative_quota[ID]+i];
+            }
+
+            //2.3.2: Compute the trajectory
+            vector<vector<float>> traj{simulateTrajectory(init,period,h_0)};
+
+            //2.3.3: Find the time index associated to the time instant and extract
+            size_t time_index;
+            if(time_instant<=0){ //last point
+                time_index = traj.size()-1;
+            }
+            else{ //If is not the last we do it externally with two functions
+                time_index = findTimeIndex(extractTimes(traj),time_instant);
+            }
+
+            local_picture[i] = traj[time_index];
+        }
+
+        //Reunite all the values
+
+        #pragma omp critical
+        {
+            for(size_t i=0;i<quota[ID];i++){
+                picture.push_back(local_picture[i]);
+            }
+        }
+
+    }
+
+    return picture;
+}
+
 //################### PUBLIC UTILITY FUNCTIONS ####################################
 
 //This function will set the bound function. The bound function should return a boolean
@@ -334,81 +415,6 @@ void SDE_SS_System::setNumThreads(unsigned int N){
 
 //##################### TOOL FUNCTIONS ##########################################
 //These function are made to automatize some typical tests and procedure used in the analysis of the SDE.
-
-//This function will automatically produce a group of the trajectories to obtain the value in a time instant. 
-//It requires, in order,:
-//- The period, the step size and the number of trajectories (MANDATORY).
-//- A bool to say if the initial condition are random (DEFAULT = false = non random initial conditions).
-//- If the initial conditions are not random, a valid initial condition vector is necessary.
-//- If they are random, a function to compute the initial condition is required. This function has to be
-//  a zero argument - returning vector<float> function.
-//- Eventually, a time index where the PDF has to be computed. If it is not given, the PDF will be computed
-//  at the last step.
-//The output of the function will be a 2D matrix with the values of each trajectory at the time instant in each row.     
-vector<vector<float>> SDE_SS_System::produceTimePicture(float period,float h_0,unsigned int Nsim,
-                                                        bool random_initial,const vector<float> &x0 ,
-                                                        function<vector<float>()> random_f,float time_instant)
-{
-    //1. Perform some checks on the arguments:
-    checkFunctionComputeTimePicture(Nsim,random_initial,x0,random_f);
-
-    //2. Now we can start to produce the simulations and extract the points.
-    //We will work using OpenMP to optimize the performances.
-    vector<vector<float>> picture;
-
-    #pragma omp parallel num_threads(NumThreads)
-    {
-        //2.1 Assign at each threads its quota. The master will have also the remainder
-        unsigned int quota{Nsim/NumThreads};
-
-        #pragma omp master
-        {
-            quota += Nsim % NumThreads;
-        }
-
-        //2.2 We create the local storaging thus each thread can 
-        vector<vector<float>> local_picture(quota,vector<float>(size+1,0.0));
-
-        //2.3 Start to produce the trajectories
-        for(size_t i=0;i<quota;i++){
-
-            //2.3.1: We need to produce the initial condition
-            vector<float> init;
-            if(random_initial){ //random initial condition
-                init = random_f();
-            }
-            else{ //non random initial condition
-                init = x0;
-            }
-
-            //2.3.2: Compute the trajectory
-            vector<vector<float>> traj{simulateTrajectory(init,period,h_0)};
-
-            //2.3.3: Find the time index associated to the time instant and extract
-            size_t time_index;
-            if(time_instant<=0){ //last point
-                time_index = traj.size()-1;
-            }
-            else{ //If is not the last we do it externally with two functions
-                time_index = findTimeIndex(extractTimes(traj),time_instant);
-            }
-
-            local_picture[i] = traj[time_index];
-        }
-
-        //Reunite all the values
-
-        #pragma omp critical
-        {
-            for(size_t i=0;i<quota;i++){
-                picture.push_back(local_picture[i]);
-            }
-        }
-
-    }
-
-    return picture;
-}
 
 //This function will produce starting from a TimePicture such the one produced by "produceTimePicture" a 1D bin
 //system useful to obtain PDFs. This function require:
@@ -469,7 +475,7 @@ vector<vector<float>> SDE_SS_System::PDF_1D(const vector<vector<float>> &picture
     //5.2 We can work on the bins in a parallel way
     #pragma omp parallel num_threads(NumThreads)
     {
-        const unsigned int ID{omp_get_thread_num()};
+        const unsigned int ID = omp_get_thread_num();
 
         vector<float> local_bins(Nbins,0.0);
 
@@ -573,7 +579,7 @@ vector<vector<float>> SDE_SS_System::PDF_2D(const vector<vector<float>> &picture
     //5.2 We can work on the bins in a parallel way
     #pragma omp parallel num_threads(NumThreads)
     {
-        const unsigned int ID{omp_get_thread_num()};
+        const unsigned int ID = omp_get_thread_num();
 
         vector<float> local_bins(Nbins[0]*Nbins[1],0.0);
 
@@ -643,14 +649,14 @@ float SDE_SS_System::computeAutocorrelation(const vector<vector<float>> &traj,un
 //These functions are used to light the code of other more complex functions.
 
 //This function will perform the checks of the parameters of computeTimePicture.
-void SDE_SS_System::checkFunctionComputeTimePicture(unsigned int Nsim,bool random_initial,const vector<float> &x0,function<vector<float>()> random_f){
+void SDE_SS_System::checkFunctionComputeTimePicture(unsigned int Nsim,bool random_initial,const vector<vector<float>> &x0,function<vector<float>()> random_f){
     //1.0: we do not check period and h_0 because it is done in simulateTrajectory
 
     //1.1: we briefly check that Nsim is not 0, the function is defined and the size is meaningful.
     try{
         if(Nsim==0) error("produceTimePicture cannot accept Nsim=0.");
         if(random_initial && !random_f) error("random initial condition function not defined.");
-        if(!random_initial && x0.size()!=size) error("initial condition has an invalid size.");
+        if(!random_initial && x0.size()!=Nsim && x0[0].size()!=size) error("initial condition has an invalid size.");
     }
     catch(const runtime_error& e){
         cout << "SDE_SS_System: computeTimePicture: Runtime error: " << e.what() << endl;

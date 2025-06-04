@@ -84,7 +84,7 @@ class FieldClass{
     NoiseClass* noise; //NoiseClass to generate the noise.
     bool noise_initialized{false}; //Flag to keep track if the noise is initialized.
 
-public:
+protected:
 
     //This public function allow to set the noise of the FieldClass in a controlled way.
     void setNoise(NoiseClass* N);
@@ -96,6 +96,10 @@ public:
     //Function for the stochastic part of the field. To define, please
     //override "g_function_impl" as in documentation.
     vector<float> g_function(const vector<float> &x);
+
+    friend class SDE_SS_System;
+
+public:
 
     //Function for the deterministic part of the field. Override this as in
     //documentation to implement your system.
@@ -126,18 +130,10 @@ class SDE_SS_System{
     //These functions are used to light the code of other more complex functions.
 
     //This function will perform the checks of the parameters of computeTimePicture.
-    void checkFunctionComputeTimePicture(unsigned int Nsim,bool random_initial,const vector<float> &x0,function<vector<float>()> random_f);
+    void checkFunctionComputeTimePicture(unsigned int Nsim,bool random_initial,const vector<vector<float>> &x0,function<vector<float>()> random_f);
 
     //This function will perform the checks of the parameters of simulateTrajectory. 
     void checkTrajInput(const vector<float> &x0,float period, float h_0);
-
-    //Given a vector of times and a time index this function will find the slot just before the given time instant.
-    //This function is also STATIC.
-    static size_t findTimeIndex(const vector<float> &times,float TI);
-
-    //Given a vector of the shape of the one of the simulateTrajectory function,
-    //this function will extract the column of times (column 0). This function is also STATIC.
-    static vector<float> extractTimes(const vector<vector<float>> &traj);
 
     //This function will perform the checks of the parameters of PDF_1D.
     void checkFunctionPDF_1D(const vector<vector<float>> &picture,unsigned int Nbins,unsigned int axis,bool adaptive,const vector<float> &domain);
@@ -175,6 +171,21 @@ public:
     //In the returning vector the times and the values are conjointed. The first column is used for times.
     vector<vector<float>> simulateTrajectory(const vector<float> &x0,float period, float h_0);
 
+    //This function will automatically produce a group of the trajectories to obtain the value in a time instant. 
+    //It requires, in order,:
+    //- The period, the step size and the number of trajectories (MANDATORY).
+    //- A bool to say if the initial condition are random (DEFAULT = false = non random initial conditions).
+    //- If the initial conditions are not random, a vector of  valid initial condition vectors is necessary.
+    //  It should have as many initial condition points as Nsim.
+    //- If they are random, a function to compute the initial condition is required. This function has to be
+    //  a zero argument - returning vector<float> function.
+    //- Eventually, a time index where the PDF has to be computed. If it is not given, the PDF will be computed
+    //  at the last step.
+    //The output of the function will be a 2D matrix with the values of each trajectory at the time instant in each row.     
+    vector<vector<float>> produceTimePicture(float period,float h_0,unsigned int Nsim,
+                                            bool random_initial=false,const vector<vector<float>> &x0 = {{}},
+                                            function<vector<float>()> random_f = nullptr,float time_instant = -1.0f);
+
     //###################### PUBLIC UTILITY FUNCTIONS ##########################
 
     //This function will set the bound function. The bound function should return a boolean
@@ -187,22 +198,16 @@ public:
     //The standard value is 8.
     void setNumThreads(unsigned int N);
 
+    //Given a vector of times and a time index this function will find the slot just before the given time instant.
+    //This function is also STATIC.
+    static size_t findTimeIndex(const vector<float> &times,float TI);
+
+    //Given a vector of the shape of the one of the simulateTrajectory function,
+    //this function will extract the column of times (column 0). This function is also STATIC.
+    static vector<float> extractTimes(const vector<vector<float>> &traj);
+
     //####################### TOOL FUNCTIONS #####################################
     //These function are made to automatize some typical tests and procedure used in the analysis of the SDE.
-
-    //This function will automatically produce a group of the trajectories to obtain the value in a time instant. 
-    //It requires, in order,:
-    //- The period, the step size and the number of trajectories (MANDATORY).
-    //- A bool to say if the initial condition are random (DEFAULT = false = non random initial conditions).
-    //- If the initial conditions are not random, a valid initial condition vector is necessary.
-    //- If they are random, a function to compute the initial condition is required. This function has to be
-    //  a zero argument - returning vector<float> function.
-    //- Eventually, a time index where the PDF has to be computed. If it is not given, the PDF will be computed
-    //  at the last step.
-    //The output of the function will be a 2D matrix with the values of each trajectory at the time instant in each row.   
-    vector<vector<float>> produceTimePicture(float period,float h_0,unsigned int Nsim,
-                                            bool random_initial=false,const vector<float> &x0 = {},
-                                            function<vector<float>()> random_f = nullptr,float time_instant = -1.0f);
 
     //This function will produce starting from a TimePicture such the one produced by "produceTimePicture" a 1D bin
     //system useful to obtain PDFs. This function require:

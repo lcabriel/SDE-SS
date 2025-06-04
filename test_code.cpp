@@ -123,7 +123,7 @@ int main(){
     - 5°: being not fixed, we need the initial condition functions. If fixed an array x0 is required
     - 6° (NOT VISIBLE): is the time instant, if not specified it is the last step of the trajectories.
     */
-    vector<vector<float>> picture=system.produceTimePicture(2000,0.01,50,true,{},initial_cond_function);
+    vector<vector<float>> picture=system.produceTimePicture(2000,0.01,50,true,{{}},initial_cond_function);
 
     //Created the time picture we can transform it into a 1D bin. We need to pass it to the PDF_1D function with:
     //2°: the number of bins
@@ -142,7 +142,7 @@ int main(){
 
     FILE.close();
 
-    cout << "FINITO" << endl;
+    cout << "FINISH" << endl;
 
     return 0;
 }

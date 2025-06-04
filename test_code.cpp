@@ -14,11 +14,11 @@ To set the Noise properly we suggest to use the internal FieldClass function "se
 
 3. A generic system of SDEs can be written in Ito's formula as
 
-        dx = f(x)dt + g(x)dW
+        dx = f(x,t)dt + g(x,t)dW
 
 If the noise is colored can be thought most of the time in this way supposing to add a dimension to define the noise propeties.
 For other kinds of noises which cannot be expressed in this way, you are free to create your own class or, please, send it to us as a suggestion.
-Coming back, the FieldClass is created around the Ito's formula thus we need to characterised the f(x) and g(x), to do this you need to override the
+Coming back, the FieldClass is created around the Ito's formula thus we need to characterised the f(x,t) and g(x,t), to do this you need to override the
 "f_function_impl" and "g_function_impl" as in the example.
 */
 
@@ -46,7 +46,7 @@ public:
 
     //The f_function definition: we are going to say as each variable of the system
     //should be update. This design is similar to the system of equations' shape.
-    vector<float> f_function_impl(const vector<float> &x) override{
+    vector<float> f_function_impl(const vector<float> &x,float t) override{
         vector<float> y(x.size(),0.0);
 
         y[0] = x[0]*(1-x[0])*(x_e - x[1]);
@@ -57,7 +57,7 @@ public:
     }
 
     //The same can be said for the g_function.
-    vector<float> g_function_impl(const vector<float> &x) override{
+    vector<float> g_function_impl(const vector<float> &x,float t) override{
         vector<float> y(x.size(),0.0);
 
         y[0] = -x[0]*(1-x[0])*D;

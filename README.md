@@ -16,8 +16,8 @@ You need then to copy the header and the .cpp file into your directory and compi
 g++ test.cpp SDE-SS.cpp -o test.exe -lm -fopenmp
 ```
 
-The descriptor $-lm$ is needed to link the **cmath** standard library used to compute certain values. About $-fopenmp$, this is optional
-but is strongly suggested to improve your performance especially when using heavy functions such as $PDF_1D$.
+The descriptor *-lm* is needed to link the **cmath** standard library used to compute certain values. About *-fopenmp*, this is optional
+but is strongly suggested to improve your performance especially when using heavy functions such as *PDF_1D*.
 
 ## Example of usage:
 
@@ -41,7 +41,7 @@ Defined the system producing a trajectory is simple:
 vector<vector<float>> traj{system.simulateTrajectory(x0,period,h)};
 ```
 
-where $x0$ are the initial conditions, $period$ is the length of the simulation and $h$ the base time step.
+where *x0* are the initial conditions, *period* is the length of the simulation and $h$ the base time step.
 
 ## Info and improvements:
 

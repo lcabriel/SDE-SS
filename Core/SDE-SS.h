@@ -91,11 +91,11 @@ protected:
 
     //Function for the deterministic part of the field. To define, please
     //override "f_function_impl" as in documentation.
-    vector<float> f_function(const vector<float> &x,float t);
+    void f_function(const vector<float> &x,float t,vector<float> &y);
 
     //Function for the stochastic part of the field. To define, please
     //override "g_function_impl" as in documentation.
-    vector<float> g_function(const vector<float> &x,float t);
+    void g_function(const vector<float> &x,float t,vector<float> &y);
 
     friend class SDE_SS_System;
 
@@ -103,11 +103,11 @@ public:
 
     //Function for the deterministic part of the field. Override this as in
     //documentation to implement your system.
-    virtual vector<float> f_function_impl(const vector<float> &x,float t);
+    virtual void f_function_impl(const vector<float> &x,float t,vector<float> &y);
 
     //Function for the deterministic part of the field. Override this as in
     //documentation to implement your system.
-    virtual vector<float> g_function_impl(const vector<float> &x,float t);
+    virtual void g_function_impl(const vector<float> &x,float t,vector <float> &y);
 
     //This function will give the result of the compute_noise of the local NoiseClass.
     vector<float> getNoise(const vector<float> &x_i,float* h);
@@ -150,12 +150,12 @@ class SDE_SS_System{
     //Given the previous point and the step length, this internal function is the core function to evolve 
     //the last step in the new one of the trajectory. It will use the RK4 method.
     //The idea is to use a setup in the additive splitting way synergizing with RK4 and the noise method.
-    vector<float> evolveTraj(const vector<float> &x_n,float h,float t);
+    vector<float> evolveTraj(const vector<float> &x_n,float h,float t,vector<vector<float>> &k);
 
     //Given the starting point and the step, this function will return the RK4 update
     //of the deterministic part of the field.
     //REMEMBER: you have to multiply externally by h or your step eventually.
-    vector<float> RK4_method(const vector<float> &x0,float h,float t);
+    vector<float> RK4_method(const vector<float> &x0,float h,float t,vector<vector<float>> &k);
 
 public:
 

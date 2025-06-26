@@ -42,12 +42,12 @@ set then the noise you have to insert in your constructor the *setNoise* protect
 Upon implementation you only need to modify the virtual functions *f_function_impl* and *g_function_impl*, while the other functions are only used 
 by the other classes of the library. To see how to override these two, please look to *test_code.cpp* in the main directory.
 
-- *vector&lt;float&gt; f_function_impl(const vector&lt;float&gt; &x,float t)*: to personalize your system you need to override this virtual function inside your
-	field. *f_function* is used to express the deterministic function of the Ito's formula ($dx = f(x)dt+g(x)dW$). To understand how to override correctly,
+- *void f_function_impl(const vector&lt;float&gt; &x,float t,vector&lt;float&gt; &y)*: to personalize your system you need to override this virtual function inside
+	your field. *f_function* is used to express the deterministic function of the Ito's formula ($dx = f(x)dt+g(x)dW$). To understand how to override correctly,
 	please look at the test code. However, this function will require a system's point and will return the f(x) evaluation vector of the same size 
 	of the system.
-- *vector&lt;float&gt; g_function_impl(const vector&lt;float&gt; &x,float t)*: Same as the function above. You need to override it to describe the *g(x)* part of
-	Ito's formula.
+- *void g_function_impl(const vector&lt;float&gt; &x,float t,vector&lt;float&gt; &y)*: Same as the function above. You need to override it to describe the *g(x)*
+	part of Ito's formula.
 - *vector&lt;float&gt; getNoise(const vector&lt;float&gt; &x_i,float\* h)*: Upon call, this function will call the *compute_noise* function of the *NoiseClass*
 	of your field that you should have set at construction.
 

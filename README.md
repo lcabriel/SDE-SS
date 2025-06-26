@@ -1,4 +1,4 @@
-# SDE-SS (Stochastic Differential Equation - Super Solver) v. 1.1.0
+# SDE-SS (Stochastic Differential Equation - Super Solver) v. 1.1.1
 This repository contains the C++ library SDE-SS made mainly to compute trajectories of systems of SDEs. Moreover, useful related function are also integrated.
 The main part of the library is contained inside the "Core" subdirectory. Here there are all the most important and fundamental part that allow you to simulate
 SDEs.
@@ -20,11 +20,12 @@ The library is made completely on standard libraries therefore no other particul
 You need then to copy the header and the .cpp file into your directory and compile your test file $test.cpp$ as
 
 ```
-g++ test.cpp SDE-SS.cpp -o test.exe -lm -fopenmp
+g++ test.cpp SDE-SS.cpp -o test.exe -lm -fopenmp -O3
 ```
 
 The descriptor *-lm* is needed to link the **cmath** standard library used to compute certain values. About *-fopenmp*, this is optional
-but is strongly suggested to improve your performance especially when using heavy functions such as *PDF_1D*.
+but is strongly suggested to improve your performance especially when using heavy functions such as *PDF_1D*. *-O3* is recommended to have
+better performances.
 
 ## Example of usage:
 

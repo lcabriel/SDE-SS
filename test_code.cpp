@@ -46,25 +46,21 @@ public:
 
     //The f_function definition: we are going to say as each variable of the system
     //should be update. This design is similar to the system of equations' shape.
-    vector<float> f_function_impl(const vector<float> &x,float t) override{
+    void f_function_impl(const vector<float> &x,float t,vector<float> &y) override{
         vector<float> y(x.size(),0.0);
 
         y[0] = x[0]*(1-x[0])*(x_e - x[1]);
         y[1] = (x[2]-x[1])/tau2;
         y[2] = (x[0]-x[2])/tau1;
-
-        return y;
     }
 
     //The same can be said for the g_function.
-    vector<float> g_function_impl(const vector<float> &x,float t) override{
+    void g_function_impl(const vector<float> &x,float t,vector<float> &y) override{
         vector<float> y(x.size(),0.0);
 
         y[0] = -x[0]*(1-x[0])*D;
         y[1] = 0;
         y[2] = 0;
-
-        return y;
     }
 
 };

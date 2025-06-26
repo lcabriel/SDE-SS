@@ -41,23 +41,19 @@ public:
 
     //In the f(x) we have in [0] all the field of the main system while we need to add
     //an extra variable to manage the W(t). There we will use the NoisePlug!
-    vector<float> f_function_impl(const vector<float>& x,float t) override{
+    void f_function_impl(const vector<float>& x,float t,vector<float> &y) override{
         vector<float> y(x.size(),0.0);
 
         y[0] = x[0]*(1-x[0])+x[0]*(1-x[0])*B*sin(sqrt(2.0/tau)*x[1]); //x[1] == W(t)
         y[1] = W.deterministic_part(x,t);
-
-        return y;
     }
 
     //Similarly, for the stochastic part we will have at [0] that g(x)=0 thus we can leave it
     //as it is. For [1] we will use the stochastic_part of the NoisePlug.
-    vector<float> g_function_impl(const vector<float>& x,float t) override{
+    void g_function_impl(const vector<float>& x,float t,vector<float> &y) override{
         vector<float> y(x.size(),0.0);
 
         y[1] = W.stochastic_part(x,t);
-
-        return y;
     }
 
 };

@@ -139,7 +139,7 @@ void FieldClass::setNoise(NoiseClass* N){
 
 //Function for the deterministic part of the field. To define, please
 //override "f_function_impl" as in documentation.
-vector<float> FieldClass::f_function(const vector<float> &x,float t){
+void FieldClass::f_function(const vector<float> &x,float t,vector<float> &y){
     try{
         if(!noise_initialized) error("Noise in the FieldClass not initialized.");
     }
@@ -147,13 +147,12 @@ vector<float> FieldClass::f_function(const vector<float> &x,float t){
         cout << "FieldClass: f_function: Runtime error: " << e.what() << endl;
         exit(101);
     }
-
-    return f_function_impl(x,t);
+    f_function_impl(x,t,y); 
 }
 
 //Function for the stochastic part of the field. To define, please
 //override "g_function_impl" as in documentation.
-vector<float> FieldClass::g_function(const vector<float> &x,float t){
+void FieldClass::g_function(const vector<float> &x,float t,vector<float> &y){
     try{
         if(!noise_initialized) error("Noise in a FieldClass not initialized.");
     }
@@ -161,21 +160,16 @@ vector<float> FieldClass::g_function(const vector<float> &x,float t){
         cout << "FieldClass: g_function: Runtime error: " << e.what() << endl;
         exit(101);
     }
-
-    return g_function_impl(x,t);
+    g_function_impl(x,t,y);
 }
 
 //Function for the deterministic part of the field. Override this as in
 //documentation to implement your system.
-vector<float> FieldClass::f_function_impl(const vector<float> &x,float t){
-    return x;
-}
+void FieldClass::f_function_impl(const vector<float> &x,float t,vector<float> &y){}
 
 //Function for the stochastic part of the field. Override this as in
 //documentation to implement your system.
-vector<float> FieldClass::g_function_impl(const vector<float> &x,float t){
-    return x;
-}
+void FieldClass::g_function_impl(const vector<float> &x,float t,vector<float> &y){}
 
 //This function will give the result of the compute_noise of the local NoiseClass.
 vector<float> FieldClass::getNoise(const vector<float> &x_i,float* h){
@@ -218,17 +212,20 @@ SDE_SS_System::SDE_SS_System(unsigned int N,FieldClass* F,bool isBounded):
 //Given the previous point and the step length, this internal function is the core function to evolve 
 //the last step in the new one of the trajectory. It will use the RK4 method.
 //The idea is to use a setup in the Strang splitting way synergizing with RK4 and the noise method.
-vector<float> SDE_SS_System::evolveTraj(const vector<float> &x_n,float h,float t){
+vector<float> SDE_SS_System::evolveTraj(const vector<float> &x_n,float h,float t,vector<vector<float>> &k){
 
     //1. We simulate the deterministic part of the field with RK4 for half step
     //Now we compute X^1 (the first intermediate step)
-    vector<float> x1{x_n+RK4_method(x_n,h/2,t)*(h/2.0f)};
+    vector<float> x1{x_n+RK4_method(x_n,h/2,t,k)*(h/2.0f)};
 
     //2. Add the stochastic part
-    x1 = x1+(field->g_function(x1,t))*(field->getNoise(x1,&h)); //Compute the noisy part; is multiplied than for g_function
+    vector<float> g(size,0.0);
+    field->g_function(x1,t,g);
+
+    x1 = x1+g*(field->getNoise(x1,&h)); //Compute the noisy part; is multiplied than for g_function
 
     //3. Evolve the last half step with RK4 for half step
-    x1 = x1+RK4_method(x1,h/2,t)*(h/2.0f);
+    x1 = x1+RK4_method(x1,h/2,t,k)*(h/2.0f);
 
     return x1;
 }
@@ -236,22 +233,22 @@ vector<float> SDE_SS_System::evolveTraj(const vector<float> &x_n,float h,float t
 //Given the starting point and the step, this function will return the RK4 update
 //of the deterministic part of the field.
 //REMEMBER: you have to multiply externally by h or your step eventually.
-vector<float> SDE_SS_System::RK4_method(const vector<float> &x0,float h,float t){
+vector<float> SDE_SS_System::RK4_method(const vector<float> &x0,float h,float t,vector<vector<float>> &k){
 
     vector<float> new_x{x0};
 
-    vector<float> k1{field->f_function(new_x,t)}; //compute k1
-    new_x = x0+(h/2.0f)*k1;
+    field->f_function(new_x,t,k[0]); //compute k1
+    new_x = x0+(h/2.0f)*k[0];
 
-    vector<float> k2{field->f_function(new_x,t)}; //compute k2
-    new_x = x0+(h/2.0f)*k2;
+    field->f_function(new_x,t,k[1]); //compute k2
+    new_x = x0+(h/2.0f)*k[1];
 
-    vector<float> k3{field->f_function(new_x,t)}; //compute k3
-    new_x = x0+h*k3;
+    field->f_function(new_x,t,k[2]); //compute k3
+    new_x = x0+h*k[2];
 
-    vector<float> k4{field->f_function(new_x,t)}; //compute k4
+    field->f_function(new_x,t,k[3]); //compute k4
 
-    return (k1+2.0f*k2+2.0f*k3+k4)*(1.0f/6.0f);
+    return (k[0]+2.0f*k[1]+2.0f*k[2]+k[3])*(1.0f/6.0f);
 }
 
 //##################### CORE FUNCTIONS ##########################################
@@ -271,15 +268,17 @@ vector<vector<float>> SDE_SS_System::simulateTrajectory(const vector<float> &x0,
 
     float h{h_0}; //The h used step-by-step. Can change to adapt to the boundary
 
+    vector<vector<float>> ks(4,vector<float>(size,0.0)); //k vector used by the RK4 method to avoid reallocation
+
     do{
 
-        vector<float> new_point{evolveTraj(values.back(),h,times.back())}; //define the new point
+        vector<float> new_point{evolveTraj(values.back(),h,times.back(),ks)}; //define the new point
 
         //if out of bound
         if(bounded){
             while(!bounds(new_point)){
                 h = h/10.0;
-                new_point = evolveTraj(values.back(),h,times.back());
+                new_point = evolveTraj(values.back(),h,times.back(),ks);
             }
         }
 

@@ -51,6 +51,18 @@ by the other classes of the library. To see how to override these two, please lo
 - *vector&lt;float&gt; getNoise(const vector&lt;float&gt; &x_i,float\* h)*: Upon call, this function will call the *compute_noise* function of the *NoiseClass*
 	of your field that you should have set at construction.
 
+## Data Linker ("DataLinker"):
+
+This small generic class is implemented when your fields presents some parameters or elements which are not fixed in time and are based on the values of a trajectory
+*vector&lt;vector&lt;float&gt;&gt;* array as the one produced by the *SDE_SS_System::simulateTrajectory*. This class (as *FieldClass*) has to be personalize via child
+class creating a proper constructor (where extra parameters could be added) and giving a definition to the virtual function *getData* which will be use to retrive the
+data from the array when computing the field. A DataLinker entity should be theoretically used inside your own custom FieldClass, however for more information about the implementation please look to the *test_code_data.cpp*. Both the array (called *data*) and the TimeOptimizationCounter (called *counter*; see below) can be accessed by child classes.
+
+- *float getData(float t)*: this virtual function, when defined in the child class, should gather one of the variables of the trajectory to the nearest previous time
+	instant defined by *t*. Therefore, this function should be override by the child classes as shown in *test_code_data.cpp* having the possibility to access directly to the data array *data*. If necessary, you can create multiple copies of this function in your child if you need to access different data in different points. Obviously the array of data is expressed as a trajectory thus *t* has to be converted in an index calling in the child-defined *getData* the protected function *findTimeIndex*.
+- *About the TimeOptimizationCounter*: this is not exactly a function but can be useful for the final user to know how the DataLinker works under the hood to exploit
+	as better as possible its potential. The TimeOptimizationCounter (called *counter* in the code) is defined upon instancing with value equal to 0. This is used by the data linker to point where the previous time instant pointed in the trajectory. Usually, the data linked is used in the system simulations which evolve instant by instant the trajectory in time and the TimeOptimizationCounter is used by *findTimeIndex* to reduce the necessary time avoiding to repeat the searching process in its entirety. Moreover, I opted to let *counter* accessible in the class to allow the user in the new child-class function to avoid multiple searches if your process require to access to multiple variables. In any moment you can reset the counter to 0 with the public function *void resetTimeOptimizationCounter*.   
+
 ## Stochastic Differential Equation - Super Solver - System ("SDE_SS_System"):
 
 This is the main class of the library and the one you will use the most. It has three objective: representing your system, allowing you to produce 

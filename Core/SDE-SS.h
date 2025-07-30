@@ -114,6 +114,33 @@ public:
 
 };
 
+//################################################# DATALINKER ############################################################################
+
+//The generic DataLinker is an element that can be used by the FieldClass when the field presents a forcing factor which is given by a data set (vector<vector<float>>) previously produced.
+//The function to obtain get data values is "getData" which should be override in a child class as explained in the documentation.
+//Moreover, the class is kept generic to add in the child possible variations of "getData" or if some parameters are required.
+class DataLinker{
+
+protected:
+
+    vector<vector<float>> data; //The array of data used in the simulation.
+    size_t counter{0}; //Used for optimization, indicate the position on data of the previously picked time instant.
+
+    //Given a certain time instant, the variable will find the a time-index near the value (the next one). The TimeOptimizationCounter
+    //is used to improve performances.
+    size_t findTimeIndex(float t);
+
+public:
+
+    //Given a certain time instant the getData returns a child-defined float value near to the given time.
+    virtual float getData(float t);
+
+    //This function is used to reset the TimeOptimizationCounter which is used to optimize the finding process of the time instant during the
+    //simulations. 
+    void resetTimeOptimizationCounter();
+
+};
+
 //################################################# SYSTEM #################################################################################
 
 //The main class of the library. It is used to define a system of SDEs and to produce trajectories of that.

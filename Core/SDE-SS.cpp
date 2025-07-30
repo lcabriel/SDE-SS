@@ -184,6 +184,46 @@ vector<float> FieldClass::getNoise(const vector<float> &x_i,float* h){
     return noise->compute_noise(x_i,h);
 }
 
+//##############################################################################################################################################################
+//########################################################### DATALINKER #############################################################################
+//##############################################################################################################################################################
+
+//Given a certain time instant, the variable will find the a time-index near the value (the previous one). The TimeOptimizationCounter
+//is used to improve performances.
+size_t DataLinker::findTimeIndex(float t){
+    //1. Try to look if is the same time
+    if((t>=data[counter][0])&&(t<data[counter+1][0])){
+        return counter;
+    }
+    //2. Try to find if it is after the counter
+    for(size_t i=counter+1;i<data.size();i++){
+        if((t>=data[i][0])&&(t<data[i+1][0])){
+            counter = i;
+            return i;
+        }
+    }
+    //3. Otherwise is before
+    for(size_t i=0;i<counter;i++){
+        if((t>=data[i][0])&&(t<data[i+1][0])){
+            counter = i;
+            return i;
+        }        
+    }
+
+    cout << "DataLinker: findTimeInstant: Runtime error: time instant not found" << endl;
+    exit(401);
+}
+
+//Given a certain time instant the getData returns a child-defined float value near to the given time.
+float DataLinker::getData(float t){
+    return 0.0;
+}
+
+//This function is used to reset the TimeOptimizationCounter which is used to optimize the finding process of the time instant during the
+//simulations. 
+void DataLinker::resetTimeOptimizationCounter(){
+    counter=0;
+}
 
 //##############################################################################################################################################################
 //######################################################### SYSTEM #############################################################################################

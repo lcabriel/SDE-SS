@@ -11,7 +11,7 @@ Using the *NoisePlugs* is very simple. They are actually a little bit more than 
 the constants they use and, therefore, eventually change them during your work. To use them you must declare an extra variable for your system and
 define the update of this variable in *f_function_impl* and *g_function_impl* with the *deterministic_part* and *stochastic_part* of your *NoisePlug*.
 It is harder to explain than it seems, therefore we have inserted an example code in this subdirectory that shows you how easy actually it is to use the 
-NoisePlugs.
+NoisePlugs. Nonetheless, I have added a test code to show how to use the NoisePlugs in the *TestCodes* directory.
 
 ## What NoisePlugs have been defined?
 

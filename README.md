@@ -1,4 +1,5 @@
-# SDE-SS (Stochastic Differential Equation - Super Solver) v. 1.2.1
+# SDE-SS (Stochastic Differential Equation - Super Solver) v. 1.2.2
+
 This repository contains the C++ library SDE-SS made mainly to compute trajectories of systems of SDEs. Moreover, useful related function are also integrated.
 The main part of the library is contained inside the "Core" subdirectory. Here there are all the most important and fundamental part that allow you to simulate
 SDEs.
@@ -17,7 +18,7 @@ To use the library in its core, you have to simply add at beginning of your .cpp
 ```
 
 The library is made completely on standard libraries therefore no other particulars are required.
-You need then to copy the header and the .cpp file into your directory and compile your test file $test.cpp$ as
+You need then to copy the header and the .cpp file into your directory and compile your test file $test.cpp$, as example, with
 
 ```
 g++ test.cpp SDE-SS.cpp -o test.exe -lm -fopenmp -O3
@@ -25,23 +26,23 @@ g++ test.cpp SDE-SS.cpp -o test.exe -lm -fopenmp -O3
 
 The descriptor *-lm* is needed to link the **cmath** standard library used to compute certain values. About *-fopenmp*, this is optional
 but is strongly suggested to improve your performance especially when using heavy functions such as *PDF_1D*. *-O3* is recommended to have
-better performances.
+better performances too.
 
 ## Example of usage:
 
-For a better example, please look to the file *test_code.cpp*.
+For a better example of how to use the basic features of SDE-SS, please look to the file *test_code.cpp* inside the *TestCodes* subdirectory.
 The central class of the library is the *SDE_SS_System*, this class is the representation of your dynamic system.
 
 To be characterised, a system requires a certain dimensionality and a field. The field has to be represented creating a child class of the general *FieldClass*.
-The *FieldClass* requires also a Noise. We have already implemented a couple of noise in the library however custom one can be created modifying the general *NoiseClass*.
+The *FieldClass* requires also a Noise. We have already implemented a couple of noise in the library, however custom one can be created implementing childs of the general *NoiseClass*.
 
-Thus defined a certain *field* as in the *test_code.cpp* we can build a 3D system as
+Thus, defined a certain *field* as in the *test_code.cpp*, we can build a 3D system as
 
 ```
 SDE_SS_System system(3,&field,true);
 ```
 
-The last boolean argument of the constructor is used to tell the system that the problem is bounded. To understand how to use the bounds, please look to *test_code.cpp* and to the README of the "Library" directory.
+The last boolean argument of the constructor is used to tell the system that the problem/system is bounded. To understand how to use the bounds, please look to *test_code.cpp* and to the README of the "Core" directory.
 
 Defined the system producing a trajectory is simple:
 
@@ -49,13 +50,13 @@ Defined the system producing a trajectory is simple:
 vector<vector<float>> traj{system.simulateTrajectory(x0,period,h)};
 ```
 
-where *x0* are the initial conditions, *period* is the length of the simulation and $h$ the base time step.
+where *x0* are the initial conditions, *period* is the length of the simulation and *h* the base time step.
 
 ## Info and improvements:
 
-This is the first bulk of the library and new features will be implemented. 
+This is the first bulk of the library and new features will be implemented in the future. For this reason, your codes based on the old versions of the library could not work anymore and raise errors. 
 
-If you have some suggestions or function you would like to see in the library, please write me at:
+If you have some suggestions or functions you would like to see in the library, please write me at:
 
 EMAIL: lorenzo.cabriel@phd.units.it 
 

@@ -51,7 +51,7 @@ public:
 
     //The f_function definition: we are going to say as each variable of the system
     //should be update. This design is similar to the system of equations' shape.
-    void f_function_impl(const vector<float> &x,float t,vector<float> &y) override{
+    void f_function_impl(const vector<float> &x,float t,vector<float> &y) const override{
 
         y[0] = x[0]*(1-x[0])*(x_e - x[1]);
         y[1] = (x[2]-x[1])/tau2;
@@ -59,7 +59,7 @@ public:
     }
 
     //The same can be said for the g_function.
-    void g_function_impl(const vector<float> &x,float t,vector<float> &y) override{
+    void g_function_impl(const vector<float> &x,float t,vector<float> &y) const override{
 
         y[0] = -x[0]*(1-x[0])*D;
         y[1] = 0;
@@ -83,16 +83,16 @@ class myDataLinker: public DataLinker{
 public:
 
     //In the constructor we pass the data of the trajectory.
-    myDataLinker(vector<vector<float>> traj){
-        data = traj;
+    myDataLinker(const Traj& traj): DataLinker(traj){}
+
+    //To get the first variable.
+    float getData(const float t) override{
+        return data.getVars()[findTimeIndex(t)][0];
     }
 
-    float getData(float t) override{
-        return data[findTimeIndex(t)][1];
-    }
-
-    float getData2(float t){
-        return data[counter][2];
+    //To get the second variable.
+    float getData2(const float t){
+        return data.getVars()[counter][1];
     }
 
 };
@@ -114,13 +114,13 @@ public:
     }
 
     //The f_function definition: let's suppose that the field with data linker is only 2D because is a different system.
-    void f_function_impl(const vector<float> &x,float t,vector<float> &y) override{
+    void f_function_impl(const vector<float> &x,float t,vector<float> &y) const override{
         y[0] = (linker->getData(t)-x[0])/tau;
         y[1] = (linker->getData2(t)-x[1])/tau;
     }
 
     //The same can be said for the g_function.
-    void g_function_impl(const vector<float> &x,float t,vector<float> &y) override{
+    void g_function_impl(const vector<float> &x,float t,vector<float> &y) const override{
         y[0] = 0;
         y[1] = 0;
     }
@@ -143,7 +143,7 @@ int main(){
     system1.setBoundFunction(boundaries);
 
     //Produce the trajectory of the first system
-    vector<vector<float>> traj1{system1.simulateTrajectory({0.7,0.0,0.0},2250,0.01)};
+    Traj traj1{system1.simulateTrajectory({0.7,0.0,0.0},2250,0.01)};
 
     //Prepare the element of the second system
     WienerEuler noise2;
@@ -154,13 +154,13 @@ int main(){
     SDE_SS_System system2(2,&field2,false);
 
     //Let's make a trajectory for the second system
-    vector<vector<float>> traj2{system2.simulateTrajectory({0.0,0.0},100,0.01)};
+    Traj traj2{system2.simulateTrajectory({0.0,0.0},100,0.01)};
 
     //THIS LAST PART IS USED SIMPLY TO SAVE THE RESULTS.
     ofstream FILE("traj_data.dat");
 
-    for(size_t i=0;i<traj2.size();i++){
-            FILE << traj2[i][1] << " " << traj2[i][2] << endl; 
+    for(size_t i=0;i<traj2.getLength();i++){
+            FILE << traj2.getVars()[i][0] << " " << traj2.getVars()[i][1] << endl; 
     }
 
     FILE.close();

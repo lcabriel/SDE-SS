@@ -41,18 +41,15 @@ public:
 
     //In the f(x) we have in [0] all the field of the main system while we need to add
     //an extra variable to manage the W(t). There we will use the NoisePlug!
-    void f_function_impl(const vector<float>& x,float t,vector<float> &y) override{
-        vector<float> y(x.size(),0.0);
-
+    void f_function_impl(const vector<float>& x,float t,vector<float> &y) const override{
         y[0] = x[0]*(1-x[0])+x[0]*(1-x[0])*B*sin(sqrt(2.0/tau)*x[1]); //x[1] == W(t)
         y[1] = W.deterministic_part(x,t);
     }
 
     //Similarly, for the stochastic part we will have at [0] that g(x)=0 thus we can leave it
     //as it is. For [1] we will use the stochastic_part of the NoisePlug.
-    void g_function_impl(const vector<float>& x,float t,vector<float> &y) override{
-        vector<float> y(x.size(),0.0);
-
+    void g_function_impl(const vector<float>& x,float t,vector<float> &y) const override{
+        y[0] = 0.0;
         y[1] = W.stochastic_part(x,t);
     }
 
@@ -68,10 +65,10 @@ int main(){
     SDE_SS_System system(2,&field); //2 because we need an extra variable for W(t)
 
     //We can, as example, produce and print a trajectory
-    vector<vector<float>> traj = system.simulateTrajectory({0.5,0.0},500,0.01); //We need also to give an initial value to the extra variable.
+    Traj traj = system.simulateTrajectory({0.5,0.0},500,0.01); //We need also to give an initial value to the extra variable.
 
-    for(size_t i=0;i<traj.size();i++){
-        cout << traj[i][0] << " " << traj[i][1] << " " << traj[i][2] << endl;// t x(t) W(t)
+    for(size_t i=0;i<traj.getLength();i++){
+        cout << traj.getTimes()[i] << " " << traj.getVars()[i][0] << " " << traj.getVars()[i][1] << endl;// t x(t) W(t)
     }
 
     return 0;

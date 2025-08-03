@@ -42,50 +42,54 @@ set then the noise you have to insert in your constructor the *setNoise* protect
 Upon implementation you only need to modify the virtual functions *f_function_impl* and *g_function_impl*, while the other functions are only used 
 by the other classes of the library. To see how to override these two, please look to *test_code.cpp* in the main directory.
 
-- *void f_function_impl(const vector&lt;float&gt; &x,float t,vector&lt;float&gt; &y)*: to personalize your system you need to override this virtual function inside
-	your field. *f_function* is used to express the deterministic function of the Ito's formula ($dx = f(x)dt+g(x)dW$). To understand how to override correctly,
-	please look at the test code. However, this function will require a system's point and will return the f(x) evaluation vector of the same size 
+- *void f_function_impl(const vector&lt;float&gt; &x,float t,vector&lt;float&gt; &y) const*: to personalize your system you need to override this virtual function
+	inside your field. *f_function* is used to express the deterministic function of the Ito's formula ($dx = f(x)dt+g(x)dW$). To understand how to override correctly, please look at the test code. However, this function will require a system's point and will return the f(x) evaluation vector of the same size 
 	of the system.
-- *void g_function_impl(const vector&lt;float&gt; &x,float t,vector&lt;float&gt; &y)*: Same as the function above. You need to override it to describe the *g(x)*
-	part of Ito's formula.
+- *void g_function_impl(const vector&lt;float&gt; &x,float t,vector&lt;float&gt; &y) const*: Same as the function above. You need to override it to describe the 
+	*g(x)* part of Ito's formula.
 - *vector&lt;float&gt; getNoise(const vector&lt;float&gt; &x_i,float\* h)*: Upon call, this function will call the *compute_noise* function of the *NoiseClass*
 	of your field that you should have set at construction.
+
+## Trajectory ("Traj"):
+
+This class is used to represent a trajectory of a system of SDEs. This is the type of output produced by the *simulateTrajectory* function of a *SDE_SS_System* instance. This a purely object and it is made more for memory optimization, tidiness of the code and unambiguousness. The class contains three elements: the vector of the time instants considered in the simulation, a 2D matrix of the values of the variables with the rows symbolizing the different time instants and the number of steps. It can be built both passing another *Traj* element or passing separately the times vector and the 2D matrix (in this case some checks are performed). Once a *Traj* is built there are no way to change the internal values.
+
+- *void getTimes()*, *void getVars()*, *void getLenght()*: these 3 get functions return respectively the three internal variables of the trajectory.
+- *vector&lt;float&gt; getInstant(size_t TI)*: given a certain time index, this function will return the features of the system at that index. The output is a vector 		with the time at the 0th slot and then the values of the variables in the same order in which are saved along the columns of the 2D matrix.   
 
 ## Data Linker ("DataLinker"):
 
 This small generic class is implemented when your fields presents some parameters or elements which are not fixed in time and are based on the values of a trajectory
-*vector&lt;vector&lt;float&gt;&gt;* array as the one produced by the *SDE_SS_System::simulateTrajectory*. This class (as *FieldClass*) has to be personalize via child
-class creating a proper constructor (where extra parameters could be added) and giving a definition to the virtual function *getData* which will be use to retrive the
-data from the array when computing the field. A DataLinker entity should be theoretically used inside your own custom FieldClass, however for more information about the implementation please look to the *test_code_data.cpp*. Both the array (called *data*) and the TimeOptimizationCounter (called *counter*; see below) can be accessed by child classes.
+*Traj* as the one produced by the *SDE_SS_System::simulateTrajectory*. This class (as *FieldClass*) has to be personalize via child
+class giving a definition to the virtual function *getData* which will be use to retrive the data from the array when computing the field. This class has already implemented a constructor that accept a *Traj* instance or a time vector and a 2D values with in each row a time instant and the along the columns the values of the variable (in this case a same dimension check on the two arguments is performed) but you can expand these on your children classes. A DataLinker entity should be theoretically used inside your own custom FieldClass, however for more information about the implementation please look to the *test_code_data.cpp*. Both the array (called *data*) and the TimeOptimizationCounter (called *counter*; see below) can be accessed by child classes.
 
-- *float getData(float t)*: this virtual function, when defined in the child class, should gather one of the variables of the trajectory to the nearest previous time
-	instant defined by *t*. Therefore, this function should be override by the child classes as shown in *test_code_data.cpp* having the possibility to access directly to the data array *data*. If necessary, you can create multiple copies of this function in your child if you need to access different data in different points. Obviously the array of data is expressed as a trajectory thus *t* has to be converted in an index calling in the child-defined *getData* the protected function *findTimeIndex*.
+- *float getData(const float t)*: this virtual function, when defined in the child class, should gather one of the variables of the trajectory to the nearest
+	previous time instant defined by *t*. Therefore, this function should be override by the child classes as shown in *test_code_data.cpp* having the possibility to access directly to the data array *data*. If necessary, you can create multiple copies of this function in your child if you need to access different data in different points. Obviously the array of data is expressed as a *Traj* trajectory, thus *t* has to be converted in an index to access on *Traj* arrays, calling in the child-defined *getData* the protected function *findTimeIndex*.
 - *About the TimeOptimizationCounter*: this is not exactly a function but can be useful for the final user to know how the DataLinker works under the hood to exploit
-	as better as possible its potential. The TimeOptimizationCounter (called *counter* in the code) is defined upon instancing with value equal to 0. This is used by the data linker to point where the previous time instant pointed in the trajectory. Usually, the data linked is used in the system simulations which evolve instant by instant the trajectory in time and the TimeOptimizationCounter is used by *findTimeIndex* to reduce the necessary time avoiding to repeat the searching process in its entirety. Moreover, I opted to let *counter* accessible in the class to allow the user in the new child-class function to avoid multiple searches if your process require to access to multiple variables. In any moment you can reset the counter to 0 with the public function *void resetTimeOptimizationCounter*.   
+	as better as possible its potential. The TimeOptimizationCounter (called *counter* in the code) is defined upon instancing with value equal to 0. This is used by the data linker to point where the previous time instant pointed in the trajectory. Usually, the data linked is used in the system simulations which evolve instant by instant the trajectory in time and the TimeOptimizationCounter is used by *findTimeIndex* to reduce the necessary time avoiding to repeat the searching process in its entirety. Moreover, I opted to let *counter* accessible in the class to allow the user in the new child-class function to avoid multiple searches if your process require to access to multiple variables of a given time instant in order. In any moment you can reset the counter to 0 with the public function *void resetTimeOptimizationCounter()*.   
 
 ## Stochastic Differential Equation - Super Solver - System ("SDE_SS_System"):
 
 This is the main class of the library and the one you will use the most. It has three objective: representing your system, allowing you to produce 
 trajectories and giving some useful tool to elaborate trajectories in an efficient way. We can split the public functions in three macro areas:
 
-- **Core functions**: the fundamental, what you are going to use the most.
+- **Core functions**: the fundamental ones, what you are going to use the most.
 - **Public Utility functions**: small functions used to manage some aspect of your system and the simulations.
 - **Tool functions**: also called *heavy*, this functions perform more complex tasks based on the simulations produced by the others.
 
 We are going to explore then more deeply the three areas. The *SDE_SS_System* is also completely parallelized using OpenMp in the mechanics of the
 heavy functions to grant good performances.
 Upon construction, a *SDE_SS_System* will require as arguments the size of your system (a.k.a. the number of equations/variables), the pointer to
-a FieldClass (or its children) instance and, optionally, a boolean value to express if the system is bounded (if it is please look to *setBoundFunction*).
+a FieldClass (or its children) instance and, optionally, a boolean value to express if the system is bounded (if it is, please take a look to *setBoundFunction*).
 
 ### Core functions:
 
-The Core functions are the bulk of the *SDE_SS_System* and the function you will use the most, probably. They are mostly linked to the "produce trajectories"
+The Core functions are the bulk of the *SDE_SS_System* and the functions you will use the most, probably. They are mostly linked to the "produce trajectories"
 aspect of your system.
 
-- *vector&lt;vector&lt;float&gt;&gt; simulateTrajectory(const vector&lt;float&gt; &x0,float period, float h_0)*: this function will simply produce a trajectory
+- *Traj simulateTrajectory(const vector&lt;float&gt; &x0,const float period,const float h_0)*: this function will simply produce a trajectory
 	using an evolution method based on a Strang splitting treating the deterministic part with a RK4 method and the deterministic part depending on the *NoiseClass*
-	*compute_noise* method of implementation (e.g. Euler-Maruyama for *WienerEuler*). The trajectory will be represented as a *vector&lt;vector&lt;float&gt;&gt;*
-	with a the time steps along the row and the point variables along the column. Actually, the first column is reserved for the time.
+	*compute_noise* method of implementation (e.g. Euler-Maruyama for *WienerEuler*). The trajectory will be produced as a Traj object (see above).
 	It requires as input a vector representing the initial condition, the length of the simulation and the base time step of the trajectory.
 - *vector&lt;vector&lt;float&gt;&gt; produceTimePicture(\[TOO MANY\])*: this complex function produced a so-called Time Picture (maybe in the future it will have
 	its own class). A Time Picture is, given a set of trajectories, the set of the values of the trajectories in a given time instant. This function requires a
@@ -100,32 +104,28 @@ aspect of your system.
 	- At last, if you want a particular time instant inside of the trajectory you need to pass it to the function, otherwise the last step values
 		are used.
 
-	Doing this, this function will return a vector&lt;vector&lt;float&gt;&gt; with in each row the values of the time and the variables at the time instant of one of the
-	trajectories.
+	Doing this, this function will return a vector&lt;vector&lt;float&gt;&gt; with in each row the values of the time and the variables at the time instant of one of the trajectories.
 
 ### Public Utility functions:
 
-This small functions are actually quite important and are implemented to set some important features of the system such as the bounds of the process (if bounded)
+These small functions are actually quite important and are implemented to set some important features of the system, such as the bounds of the process (if bounded)
 and the number of threads used in the parallel operations.
 
 - *void setBoundFunction(function&lt;bool(const vector&lt;float&gt;&)&gt; f)*: if, during the construction procedure of a *SDE_SS_System* instance, the system is
 	characterized as "bounded", you have also to set the bound function manually using this function. This function is used to check if the system is
-	within the limit at every new time step (if it is not the evolution is tried again with a smaller step). Considering this, it should be a *vector&lt;float&gt; -&gt; bool*
+	within the limit at every new time step (if it is not, the evolution is tried again with a smaller step). Considering this, it should be a *vector&lt;float&gt; -&gt; bool*
 	function.
 - *void setNumThreads(unsigned int N)*: all the Tool functions (see below) are parallelized on a certain degree. The number of threads used for the parallelisation
-	is set equal to 8 by default. However, it is possible to change the number of threads used by these heavy functions with this public utility function.
+	is set equal to **8** by default. However, it is possible to change the number of threads used by these heavy functions with this public utility function.
 - *static size_t findTimeIndex(const vector&lt;float&gt; &times,float TI)*: this static function is actually made to be used by certain Tool functions however it does
 	not depend on the system characteristics and can be useful. Given a vector of times this function will found the last slot of the vector which time value is
-	lesser than the passed time index *TI*. 
-- *static vector&lt;float&gt; extractTimes(const vector&lt;vector&lt;float&gt;&gt; &traj)*: similarly to the previous one in terms of usage inside the library, this
-	function can be useful because, given a trajectory-like *vector&lt;vector&lt;float&gt;&gt;* this function will extract the times as a *vector&lt;float&gt;*
-	(a.k.a. the 0th column).
+	immedialtely lesser than the passed time index *TI*.
 
 ### Tool functions:
 
-The Tool functions are functions (most of them heavy) that elaborates trajectories and time pictures to obtain common type of results used in papers and in research. All of them exploit parallelization using OpenMP therefore they should be able to work perfectly even linearly, obviously with worse performances.
+The Tool functions are functions (most of them heavy) that elaborates trajectories and time pictures to obtain common type of results used in papers and in research. All of them exploit parallelization using OpenMP, therefore they should be able to work perfectly even linearly, obviously with worse performances.
 
-- *vector&lt;vector&lt;float&gt;&gt; PDF_1D(\[TOO MANY\])*: the idea is fairly simple: given a time picture and chosen a variable this function will produce a bins
+- *vector&lt;vector&lt;float&gt;&gt; PDF_1D(\[TOO MANY\])*: the idea is fairly simple: given a time picture and chosen a variable, this function will produce a bins
 	system of same width along that variable ("axis"). Certainly, there are some features to define with the arguments:
 
 	- As first argument, you have to pass a time picture as the one produced by *produceTimePicture* (*vector&lt;vector&lt;float&gt;&gt;*).
@@ -149,7 +149,5 @@ The Tool functions are functions (most of them heavy) that elaborates trajectori
 
 	The output is similar but with an extra column between the two because the central value is now a point in the plane and its expressed by two coordinates.
 
-- *float computeAutocorrelation(const vector&lt;vector&lt;float&gt;&gt; &traj,unsigned int axis,float tau)*: the computation of the autocorrelation is often
-	necessary especially in situations of quasi-periodicity. This functions requires as input a trajectory, the axis along which you want to compute the
-	autocorrelation and for which time delay. The returning value will be the autocorrelation value for the trajectory for that time delay computed as covariance
-	over variance.
+- *float computeAutocorrelation(const Traj& traj,unsigned int axis,float tau)*: the computation of the autocorrelation is often
+	necessary especially in situations of quasi-periodicity. This functions requires as input a trajectory, the axis (*axis=n-1* -&gt; nth variable) along which you want to compute the autocorrelation and for which time delay. The returning value will be the autocorrelation value for the trajectory for that time delay computed as covariance over variance.

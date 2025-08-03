@@ -47,7 +47,7 @@ The last boolean argument of the constructor is used to tell the system that the
 Defined the system producing a trajectory is simple:
 
 ```
-vector<vector<float>> traj{system.simulateTrajectory(x0,period,h)};
+Traj traj{system.simulateTrajectory(x0,period,h)};
 ```
 
 where *x0* are the initial conditions, *period* is the length of the simulation and *h* the base time step.

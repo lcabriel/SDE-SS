@@ -51,7 +51,7 @@ vector<float> operator*(const vector<float>& a,const vector<float>& b) {
 //##############################################################################################################################################################
 
 //A standard compute noise that simply gives back the passed point in the system space.
-vector<float> NoiseClass::compute_noise(const vector<float>& x_i,float* h){
+vector<float> NoiseClass::compute_noise(const vector<float>& x_i,const float* h){
     return x_i;
 }
 
@@ -60,7 +60,7 @@ vector<float> NoiseClass::compute_noise(const vector<float>& x_i,float* h){
 //############################################################# PREDEFINED WIENER PROCESS ################################################################################
 //##############################################################################################################################################################
 
-//COSTRUCTOR: the distribution and the generator are initialized.
+//CONSTRUCTOR: the distribution and the generator are initialized.
 //The seed of the random engine is created starting from the time and the point of the instance.
 WienerEuler::WienerEuler():
     eng(static_cast<unsigned long>(time(0) * reinterpret_cast<uintptr_t>(this))),
@@ -69,7 +69,7 @@ WienerEuler::WienerEuler():
 
 //Compute a dW kind of step for the Wiener process using the Euler-Maruyama method. 
 //Actually a vector of the same size of the system is returned and, in each slot, there is a different dW. 
-vector<float> WienerEuler::compute_noise(const vector<float>& x_i,float* h){
+vector<float> WienerEuler::compute_noise(const vector<float>& x_i,const float* h){
     vector<float> noise_out(x_i.size(),0.0);
 
     for(size_t i=0;i<x_i.size();i++){ //dW -> N(0,1)*sqrt(h)
@@ -84,34 +84,29 @@ vector<float> WienerEuler::compute_noise(const vector<float>& x_i,float* h){
 //############################################################# PREDEFINED WIENER PROCESS ################################################################################
 //##############################################################################################################################################################
 
-//CONTRUCTOR: the distribution and the generator are initialize. 
+//CONSTRUCTOR: initializes the distribution and random generator.
 //Moreover, requires as argument the derivative of the g_function used in the field class.
 //The seed of the random engine is created starting from the time and the point of the instance.
-WienerMilstein::WienerMilstein(function<vector<float>(const vector<float>&)> derivative):
+WienerMilstein::WienerMilstein(const function<vector<float>(const vector<float>&)>& derivative):
     eng(static_cast<unsigned long>(time(0) * reinterpret_cast<uintptr_t>(this))),
     distribution(0.0, 1.0)
 {
     //Check if the argument is valid.
-    try{
-        if(!derivative) error("Derivative of g_function argument is not valid.");
-    }
-    catch(const runtime_error& e){
-        cout << "WienerMilstein: Constructor: Runtime error:" << e.what() << endl;
-        exit(301);
-    }
+    if(!derivative) error("WienerMilstein: Constructor: Runtime error: Derivative of g_function argument is not valid.");
 
     D_g = derivative;
 }
 
 //Compute a dW kind-of step for the Wiener process using the Milstein method. 
 //Actually a vector of the same size of the system is returned and, at each step there is a different dW. 
-vector<float> WienerMilstein::compute_noise(const vector<float> &x_i,float* h){
+vector<float> WienerMilstein::compute_noise(const vector<float> &x_i,const float* h){
     vector<float> noise_out(x_i.size(),0.0);
 
+    vector<float> dg_eval = D_g(x_i);
     for(size_t i=0;i<x_i.size();i++){
-        float dW = distribution(eng)*sqrt(*h);
+        const float dW = distribution(eng)*sqrt(*h);
 
-        noise_out[i] = dW + (0.5f)*(D_g(x_i)[i])*(dW*dW-*h);
+        noise_out[i] = dW + (0.5f)*dg_eval[i]*(dW*dW-*h);
     }
 
     return noise_out;
@@ -123,15 +118,9 @@ vector<float> WienerMilstein::compute_noise(const vector<float> &x_i,float* h){
 //##############################################################################################################################################################
 
 //This public function allow to set the noise of the FieldClass in a controlled way.
-void FieldClass::setNoise(NoiseClass* N){
+void FieldClass::setNoise(NoiseClass* const N){
 
-    try{
-        if(N==nullptr) error("Invalid NoiseClass passed to the function.");
-    }
-    catch(const runtime_error& e){
-        cout << "FieldClass: setNoise: Runtime error: " << e.what() << endl;
-        exit(102);
-    }
+    if(N==nullptr) error("FieldClass: setNoise: Runtime error: Invalid NoiseClass passed to the function.");
 
     noise = N;
     noise_initialized = true;
@@ -140,46 +129,33 @@ void FieldClass::setNoise(NoiseClass* N){
 //Function for the deterministic part of the field. To define, please
 //override "f_function_impl" as in documentation.
 void FieldClass::f_function(const vector<float> &x,float t,vector<float> &y){
-    try{
-        if(!noise_initialized) error("Noise in the FieldClass not initialized.");
-    }
-    catch(const runtime_error& e){
-        cout << "FieldClass: f_function: Runtime error: " << e.what() << endl;
-        exit(101);
-    }
+
+    if(!noise_initialized) error("FieldClass: f_function: Runtime error: Noise in the FieldClass not initialized.");
+
     f_function_impl(x,t,y); 
 }
 
 //Function for the stochastic part of the field. To define, please
 //override "g_function_impl" as in documentation.
 void FieldClass::g_function(const vector<float> &x,float t,vector<float> &y){
-    try{
-        if(!noise_initialized) error("Noise in a FieldClass not initialized.");
-    }
-    catch(const runtime_error& e){
-        cout << "FieldClass: g_function: Runtime error: " << e.what() << endl;
-        exit(101);
-    }
+
+    if(!noise_initialized) error("FieldClass: g_function: Runtime error: Noise in a FieldClass not initialized.");
+
     g_function_impl(x,t,y);
 }
 
-//Function for the deterministic part of the field. Override this as in
+//Implementation function for the deterministic part of the field. Override this as in
 //documentation to implement your system.
-void FieldClass::f_function_impl(const vector<float> &x,float t,vector<float> &y){}
+void FieldClass::f_function_impl(const vector<float> &x,float t,vector<float> &y) const{}
 
-//Function for the stochastic part of the field. Override this as in
+//Implementation function for the stochastic part of the field. Override this as in
 //documentation to implement your system.
-void FieldClass::g_function_impl(const vector<float> &x,float t,vector<float> &y){}
+void FieldClass::g_function_impl(const vector<float> &x,float t,vector<float> &y) const{}
 
 //This function will give the result of the compute_noise of the local NoiseClass.
-vector<float> FieldClass::getNoise(const vector<float> &x_i,float* h){
-    try{
-        if(!noise_initialized) error("Noise in a FieldClass not initialized");
-    }
-    catch(const runtime_error& e){
-        cout << "FieldClass: getNoise: Runtime error: " << e.what() << endl;
-        exit(101);
-    }
+vector<float> FieldClass::getNoise(const vector<float> &x_i,const float* h){
+    
+    if(!noise_initialized) error("FieldClass: getNoise: Runtime error: Noise in a FieldClass not initialized");
 
     return noise->compute_noise(x_i,h);
 }
@@ -188,34 +164,37 @@ vector<float> FieldClass::getNoise(const vector<float> &x_i,float* h){
 //########################################################### DATALINKER #############################################################################
 //##############################################################################################################################################################
 
+//CONSTRUCTOR:
+DataLinker::DataLinker(const Traj& t): data(t){}
+
 //Given a certain time instant, the variable will find the a time-index near the value (the previous one). The TimeOptimizationCounter
 //is used to improve performances.
-size_t DataLinker::findTimeIndex(float t){
+size_t DataLinker::findTimeIndex(const float t){
     //1. Try to look if is the same time
-    if((t>=data[counter][0])&&(t<data[counter+1][0])){
+    if((t>=data.getTimes()[counter])&&(t<data.getTimes()[counter+1])){
         return counter;
     }
     //2. Try to find if it is after the counter
-    for(size_t i=counter+1;i<data.size();i++){
-        if((t>=data[i][0])&&(t<data[i+1][0])){
+    for(size_t i=counter+1;i<data.getLength();i++){
+        if((t>=data.getTimes()[i])&&(t<data.getTimes()[i+1])){
             counter = i;
             return i;
         }
     }
     //3. Otherwise is before
     for(size_t i=0;i<counter;i++){
-        if((t>=data[i][0])&&(t<data[i+1][0])){
+        if((t>=data.getTimes()[i])&&(t<data.getTimes()[i+1])){
             counter = i;
             return i;
         }        
     }
 
-    cout << "DataLinker: findTimeInstant: Runtime error: time instant not found" << endl;
+    cout << "DataLinker: findTimeIndex: Runtime error: time instant not found: " << data.getTimes()[counter] << endl;
     exit(401);
 }
 
 //Given a certain time instant the getData returns a child-defined float value near to the given time.
-float DataLinker::getData(float t){
+float DataLinker::getData(const float t){
     return 0.0;
 }
 
@@ -223,6 +202,33 @@ float DataLinker::getData(float t){
 //simulations. 
 void DataLinker::resetTimeOptimizationCounter(){
     counter=0;
+}
+
+//##############################################################################################################################################################
+//########################################################### TRAJECTORY #############################################################################
+//##############################################################################################################################################################
+
+//CONSTRUCTOR: the time vector and the 2D array of variable values.
+Traj::Traj(vector<float> t,vector<vector<float>> v): times(t), vars(v){
+    //Check that the two arguments are of the same length.
+    if(t.size()!=v.size()) error("Traj: Constructor: Runtime error: Times vector has different number of steps than the variable 2D vector");
+
+    step_num = t.size();
+}
+
+Traj::Traj(const Traj& t): times(t.getTimes()),vars(t.getVars()),step_num(t.getLength()){}
+
+//Given a certain time index, this function will return the situation as a vector of times+vars 
+vector<float> Traj::getInstant(const size_t index) const{
+    vector<float> output(vars[0].size()+1,0.0);
+
+    output[0] = times[index];
+
+    for(unsigned int i=0;i<vars[0].size();i++){
+        output[i+1] = vars[index][i];
+    }
+
+    return output;
 }
 
 //##############################################################################################################################################################
@@ -236,14 +242,8 @@ SDE_SS_System::SDE_SS_System(unsigned int N,FieldClass* F,bool isBounded):
     field(F), bounded(isBounded), size(N)
 {
     //Check if the size of the problem is meaningful
-    try{
-        if(F == nullptr) error("Passed FieldClass is invalid (nullptr).");
-        if(N<1) error("Given size is <1. It has no sense.");
-    }
-    catch(const runtime_error& e){
-        cout << "SDE_SS_System: Constructor: Runtime error: " << e.what() << endl;
-        exit(201);
-    }
+    if(F == nullptr) error("SDE_SS_System: Constructor: Runtime error: Passed FieldClass is invalid (nullptr).");
+    if(N<1) error("SDE_SS_System: Constructor: Runtime error: Given size is <1. It has no sense.");
 }
 
 //################### EVOLUTION FUNCTIONS ####################
@@ -296,7 +296,7 @@ vector<float> SDE_SS_System::RK4_method(const vector<float> &x0,float h,float t,
 //This core function simulate a single trajectory given the initial conditions, the time period and the standard step.
 //This function will return a 2D vector with all the points of the trajectory. 
 //In the returning vector the times and the values are conjointed. The first column is used for times.
-vector<vector<float>> SDE_SS_System::simulateTrajectory(const vector<float> &x0,float period,float h_0){
+Traj SDE_SS_System::simulateTrajectory(const vector<float> &x0,const float period,const float h_0){
     checkTrajInput(x0,period,h_0); //Check if the inputs are meaningful
 
     //Setup the initial point of the trajectory
@@ -323,25 +323,16 @@ vector<vector<float>> SDE_SS_System::simulateTrajectory(const vector<float> &x0,
         }
 
         //Add the new point
-        values.push_back(new_point);
-        times.push_back(times.back()+h);
+        values.emplace_back(new_point);
+        times.emplace_back(times.back()+h);
 
         //Reset the step
         h = h_0;
 
     }while((times.back()+h)<=period);
 
-    //Prepare the final output
-    vector<vector<float>> output(times.size(),vector<float>(size+1,0.0));
-
-    for(unsigned long int i=0;i<times.size();i++){
-        output[i][0] = times[i];
-        for(size_t j=0;j<size;j++){
-            output[i][j+1] = values[i][j];
-        }
-    }
-
-    return output;
+    //Return the Traj object
+    return Traj(times,values);
 }
 
 //This function will automatically produce a group of the trajectories to obtain the value in a time instant. 
@@ -355,9 +346,9 @@ vector<vector<float>> SDE_SS_System::simulateTrajectory(const vector<float> &x0,
 //- Eventually, a time index where the PDF has to be computed. If it is not given, the PDF will be computed
 //  at the last step.
 //The output of the function will be a 2D matrix with the values of each trajectory at the time instant in each row.     
-vector<vector<float>> SDE_SS_System::produceTimePicture(float period,float h_0,unsigned int Nsim,
-                                                        bool random_initial,const vector<vector<float>> &x0 ,
-                                                        function<vector<float>()> random_f,float time_instant)
+vector<vector<float>> SDE_SS_System::produceTimePicture(const float period,const float h_0,unsigned int Nsim,
+                                                        const bool random_initial,const vector<vector<float>> &x0 ,
+                                                        const function<vector<float>()>& random_f,const float time_instant)
 {
     //1. Perform some checks on the arguments:
     checkFunctionComputeTimePicture(Nsim,random_initial,x0,random_f);
@@ -397,26 +388,25 @@ vector<vector<float>> SDE_SS_System::produceTimePicture(float period,float h_0,u
             }
 
             //2.3.2: Compute the trajectory
-            vector<vector<float>> traj{simulateTrajectory(init,period,h_0)};
+            Traj traj{simulateTrajectory(init,period,h_0)};
 
             //2.3.3: Find the time index associated to the time instant and extract
             size_t time_index;
             if(time_instant<=0){ //last point
-                time_index = traj.size()-1;
+                time_index = traj.getLength()-1;
             }
             else{ //If is not the last we do it externally with two functions
-                time_index = findTimeIndex(extractTimes(traj),time_instant);
+                time_index = findTimeIndex(traj.getTimes(),time_instant);
             }
 
-            local_picture[i] = traj[time_index];
+            local_picture[i] = traj.getInstant(time_index);
         }
 
         //Reunite all the values
-
         #pragma omp critical
         {
             for(size_t i=0;i<quota[ID];i++){
-                picture.push_back(local_picture[i]);
+                picture.emplace_back(move(local_picture[i]));
             }
         }
 
@@ -431,17 +421,11 @@ vector<vector<float>> SDE_SS_System::produceTimePicture(float period,float h_0,u
 //and has as input a vector<float> (the point). The function should return "true" when
 //the point is in the domain.
 //The system has to be bounded (construction) to this function to work.
-void SDE_SS_System::setBoundFunction(function<bool(const vector<float>&)> f = nullptr){
+void SDE_SS_System::setBoundFunction(const function<bool(const vector<float>&)>& f = nullptr){
     
     //Check that the system is defined as bounded and the function defined
-    try{
-        if(!bounded) error("SDE_SS_System is not bounded but setBoundFunction is called.");
-        if(!f) error("setBoundFunction argument is not valid.");
-    }
-    catch(const runtime_error& e){
-        cout << "SDE_SS_System: setBoundFunction: Runtime error: " << e.what() << endl;
-        exit(203);
-    }
+    if(!bounded) error("SDE_SS_System: setBoundFunction: Runtime error: SDE_SS_System is not bounded but setBoundFunction is called.");
+    if(!f) error("SDE_SS_System: setBoundFunction: Runtime error: setBoundFunction argument is not valid.");
 
     bounds = f;
 }
@@ -540,7 +524,7 @@ vector<vector<float>> SDE_SS_System::PDF_1D(const vector<vector<float>> &picture
 
 }  
 
-//This function will produce starting from a Time Picutre such the one produced by "produceTimePicture" a 2D bin
+//This function will produce starting from a Time Picture such the one produced by "produceTimePicture" a 2D bin
 //system useful to obtain PDFs, This function require:
 //- The TimePicture style vector<vector<float>> (MANDATORY).
 //- A 2D vector for the number of bins along the axis (MANDATORY).
@@ -656,72 +640,61 @@ vector<vector<float>> SDE_SS_System::PDF_2D(const vector<vector<float>> &picture
 //- The time delay (\tau) of the autocorrelation (MANDATORY).
 //The output will be the autocorrelation value computed as covariance/variance.
 //Also the time delay is converted in the nearest below number of steps.
-float SDE_SS_System::computeAutocorrelation(const vector<vector<float>> &traj,unsigned int axis,float tau){
+float SDE_SS_System::computeAutocorrelation(const Traj& traj,unsigned int axis,float tau){
     checkAutocorrelationInput(traj,axis,tau);
 
     //1. We need to convert the time delay in the step delay
-    size_t window{findTimeIndex(extractTimes(traj),tau)};
+    size_t window{findTimeIndex(traj.getTimes(),tau)};
 
     //2. We need then to compute the time mean of the trajectory for the axis
     float mean{0.0};
-    for(size_t i=0;i<traj.size();i++){
-        mean += traj[i][axis];
+    for(size_t i=0;i<traj.getLength();i++){
+        mean += traj.getVars()[i][axis];
     }
-    mean = mean/traj.size();
+    mean = mean/traj.getLength();
 
     //3. We can compute the pseudo-covariance and the pseudo-variance at the same time for the common part
     float cov{0.0};
     float var{0.0};
-    for(size_t i=0;i<traj.size()-1-window;i++){
-        cov += (traj[i][axis]-mean)*(traj[i+window][axis]-mean);
-        var += (traj[i][axis]-mean)*(traj[i][axis]-mean);
+    for(size_t i=0;i<traj.getLength()-1-window;i++){
+        cov += (traj.getVars()[i][axis]-mean)*(traj.getVars()[i+window][axis]-mean);
+        var += (traj.getVars()[i][axis]-mean)*(traj.getVars()[i][axis]-mean);
     }
     //We need also to complete the variance
-    for(size_t i=traj.size()-1-window;i<traj.size()-1;i++){
-        var += (traj[i][axis]-mean)*(traj[i][axis]-mean);
+    for(size_t i=traj.getLength()-1-window;i<traj.getLength()-1;i++){
+        var += (traj.getVars()[i][axis]-mean)*(traj.getVars()[i][axis]-mean);
     }
 
     return cov/var;
 }
 
 //##################################################### SUPPORT FUNCTIONS #########################################################################
-//These functions are used to light the code of other more complex functions.
+//Helper functions to simplify the logic of higher-level routines.
 
 //This function will perform the checks of the parameters of computeTimePicture.
-void SDE_SS_System::checkFunctionComputeTimePicture(unsigned int Nsim,bool random_initial,const vector<vector<float>> &x0,function<vector<float>()> random_f){
+void SDE_SS_System::checkFunctionComputeTimePicture(const unsigned int Nsim,const bool random_initial,const vector<vector<float>> &x0,
+                                                    const function<vector<float>()>& random_f){
     //1.0: we do not check period and h_0 because it is done in simulateTrajectory
 
     //1.1: we briefly check that Nsim is not 0, the function is defined and the size is meaningful.
-    try{
-        if(Nsim==0) error("produceTimePicture cannot accept Nsim=0.");
-        if(random_initial && !random_f) error("random initial condition function not defined.");
-        if(!random_initial && x0.size()!=Nsim && x0[0].size()!=size) error("initial condition has an invalid size.");
-    }
-    catch(const runtime_error& e){
-        cout << "SDE_SS_System: computeTimePicture: Runtime error: " << e.what() << endl;
-        exit(204);
-    }
+    if(Nsim==0) error("SDE_SS_System: computeTimePicture: Runtime error: produceTimePicture cannot accept Nsim=0.");
+    if(random_initial && !random_f) error("SDE_SS_System: computeTimePicture: Runtime error: random initial condition function not defined.");
+    if(!random_initial && (x0.size()!=Nsim || x0[0].size()!=size)) error("SDE_SS_System: computeTimePicture: Runtime error: initial condition has an invalid size.");
 }
 
 //This function will perform the checks of the parameters of simulateTrajectory. 
-void SDE_SS_System::checkTrajInput(const vector<float> &x0,float period,float h_0){
+void SDE_SS_System::checkTrajInput(const vector<float> &x0,const float period,const float h_0){
     
     //Check correct size of the initial condition vector, the positivity of the period and the meaningfulness of the step
-    try{
-        if(x0.size()!=size) error("Initial condition vector have more or less dimensions than the system.");
-        if(period<=0) error("Negative or null time period for the trajectory.");
-        if((h_0<=0)||(h_0>period)) error("Unmeaningful time step for the trajectory.");
-    }
-    catch(const runtime_error& e){
-        cout << "SDE_SS_System: simulateTrajectory: Runtime error: " << e.what() << endl;
-        exit(202);
-    }
+    if(x0.size()!=size) error("SDE_SS_System: simulateTrajectory: Runtime error: Initial condition vector have more or less dimensions than the system.");
+    if(period<=0) error("SDE_SS_System: simulateTrajectory: Runtime error: Negative or null time period for the trajectory.");
+    if((h_0<=0)||(h_0>period)) error("SDE_SS_System: simulateTrajectory: Runtime error: Unmeaningful time step for the trajectory.");
 }
 
 //Given a vector of times and a time index this function will find the slot just before the given time instant.
 //This function is also STATIC.
-size_t SDE_SS_System::findTimeIndex(const vector<float> &times,float TI){
-    for(size_t i=0;i<times.size();i++){
+size_t SDE_SS_System::findTimeIndex(const vector<float> &times,const float TI){
+    for(size_t i=1;i<times.size();i++){
         if(TI<times[i]){
             return i-1;
         }
@@ -731,59 +704,34 @@ size_t SDE_SS_System::findTimeIndex(const vector<float> &times,float TI){
     exit(205);
 }
 
-//Given a vector of the shape of the one of the simulateTrajectory function,
-//this function will extract the column of times (column 0). This function is also STATIC.
-vector<float> SDE_SS_System::extractTimes(const vector<vector<float>> &traj){
-    vector<float> times(traj.size(),0.0);
-
-    for(size_t i=0;i<traj.size();i++){
-        times[i] = traj[i][0];
-    }
-
-    return times;
-}
-
 //This function will perform the checks of the parameters of PDF_1D.
-void SDE_SS_System::checkFunctionPDF_1D(const vector<vector<float>> &picture,unsigned int Nbins,unsigned int axis,bool adaptive,const vector<float> &domain){
+void SDE_SS_System::checkFunctionPDF_1D(const vector<vector<float>> &picture,const unsigned int Nbins,const unsigned int axis,
+                                        const bool adaptive,const vector<float> &domain){
     //Check the picture size is equal to the system size, the number of bins meaningful,
     //the axis is not bigger than the dimensionality and the domain is valid.
-    try{
-        if(picture[0].size()!=(size+1)) error("Time Picture passed has a size incompatible with the problem.");
-        if(Nbins<1) error("Number of bins passed is less than 1.");
-        if(axis>=(size+1)) error("No variable associated with that axis of the system.");
-        if(domain[0]==domain[1]) error("Undefined or domain with equal extremes.");
-    }
-    catch(const runtime_error& e){
-        cout << "SDE_SS_System: PDF_1D: Runtime error: " << e.what() << endl;
-        exit(205);
-    }
+    if(picture[0].size()!=(size+1)) error("SDE_SS_System: PDF_1D: Runtime error: Time Picture passed has a size incompatible with the problem.");
+    if(Nbins<1) error("SDE_SS_System: PDF_1D: Runtime error: Number of bins passed is less than 1.");
+    if(axis>=(size+1)) error("SDE_SS_System: PDF_1D: Runtime error: No variable associated with that axis of the system.");
+    if(domain[0]==domain[1]) error("SDE_SS_System: PDF_1D: Runtime error: Undefined or domain with equal extremes.");
 }
 
 //This function will perform the checks of the parameters of PDF_2D.
-void SDE_SS_System::checkFunctionPDF_2D(const vector<vector<float>> &picture,vector<unsigned int> Nbins,vector<unsigned int> axis,bool adaptive,const vector<float> &domain){
+void SDE_SS_System::checkFunctionPDF_2D(const vector<vector<float>> &picture,const vector<unsigned int> Nbins,const vector<unsigned int> axis,
+                                        const bool adaptive,const vector<float> &domain){
     //1.1 Check the picture size is equal to the system size, the number of bins meaningful
     //the axis is not bigger than the dimensionality and the domain is valid. This is done for both the axis.
-    try{
-        if(picture[0].size()!=(size+1)) error("Time Picture passed has a size incompatible with the problem.");
-        if(Nbins[0]<1 || Nbins[1]<1) error("Number of bins passed is less than 1.");
-        if(axis[0]>=(size+1) || axis[1]>=(size+1)) error("No variable associated with that axis of the system.");
-        if(domain[0]==domain[1]||domain[2]==domain[3]) error("Undefined or domain with equal extremes.");
-    }
-    catch(const runtime_error& e){
-        cout << "SDE_SS_System: PDF_2D: Runtime error: " << e.what() << endl;
-        exit(205);
-    }
+    if(picture[0].size()!=(size+1)) error("SDE_SS_System: PDF_2D: Runtime error: Time Picture passed has a size incompatible with the problem.");
+    if(Nbins[0]<1 || Nbins[1]<1) error("SDE_SS_System: PDF_2D: Runtime error: Number of bins passed is less than 1.");
+    if(axis[0]>=(size+1) || axis[1]>=(size+1)) error("SDE_SS_System: PDF_2D: Runtime error: No variable associated with that axis of the system.");
+    if(domain[0]==domain[1]||domain[2]==domain[3]) error("SDE_SS_System: PDF_2D: Runtime error: Undefined or domain with equal extremes.");
 }
 
 //This function will perform the checks of the parameters of computeAutocorrelation.
-void SDE_SS_System::checkAutocorrelationInput(const vector<vector<float>> &traj,unsigned int axis,float tau){
-    try{
-        if(axis>=size+1) error("No variable associated with the given autocorrelation axis.");
-        if(tau>traj.back()[0]) error("Time delay bigger than the trajectory length.");
-        if(tau>0) error("Time delay should be bigger than 0.");
-    }
-    catch(const runtime_error& e){
-        cout << "SDE_SS_System: computeAutocorrelation: Runtime error: " << e.what() << endl;
-        exit(206);
-    }
+void SDE_SS_System::checkAutocorrelationInput(const Traj& traj,const unsigned int axis,const float tau){
+
+    //Check that the axis actually exist in comparison with the system size. Then check if the time window is lesser than the trajectory length.
+    //At last, verify also that the time window is meaningful thus strictly positive.
+    if(axis>=size) error("SDE_SS_System: computeAutocorrelation: Runtime error: No variable associated with the given autocorrelation axis.");
+    if(tau>(traj.getTimes()).back()) error("SDE_SS_System: computeAutocorrelation: Runtime error: Time delay bigger than the trajectory length.");
+    if(tau<=0) error("SDE_SS_System: computeAutocorrelation: Runtime error: Time delay should be bigger than 0.");
 }

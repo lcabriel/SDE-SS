@@ -36,11 +36,11 @@ public:
 
     //This function is used to compute the deterministic part of the SDE ( f(x) ) describing the noise accoding to Ito's formula.
     //It has to be override by the different NoisePlugs.
-    virtual float deterministic_part(const vector<float> &x,float t);
+    virtual float deterministic_part(const vector<float> &x,float t) const;
 
     //This function is used to compute the stochastic part of the SDE ( g(x) ) describing the noise accoding to Ito's formula.
     //It has to be override by the different NoisePlugs.
-    virtual float stochastic_part(const vector<float> &x,float t);
+    virtual float stochastic_part(const vector<float> &x,float t) const;
 
 };
 
@@ -59,10 +59,10 @@ class WienerProcessNP: public NoisePlug{
 public:
 
     //Override of the NoisePlug deterministic_part. For the Wiener Process is simply f(x)=0.
-    float deterministic_part(const vector<float> &x,float t) override;
+    float deterministic_part(const vector<float> &x,float t) const override;
 
     //Override of the NoisePlug stochastic_part. For the Wiener Process is simply g(x)=1.
-    float stochastic_part(const vector<float> &x,float t) override;
+    float stochastic_part(const vector<float> &x,float t) const override;
 
 };
 

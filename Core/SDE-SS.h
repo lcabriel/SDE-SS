@@ -15,8 +15,9 @@
 using namespace std;
 
 //Function to produce in an easier way the error when needed.
-inline void error(const string& s){
-    throw runtime_error(s);
+[[noreturn]] inline void error(const string& msg){
+    cerr << "Fatal error: " << msg << endl;
+    exit(EXIT_FAILURE);
 }
 
 //#################################################### GENERIC NOISE CLASS ###########################################################
@@ -27,7 +28,7 @@ class NoiseClass{
 public:
     
     //A standard compute noise that simply gives back the passed point in the system space.
-    virtual vector<float> compute_noise(const vector<float> &x_i,float* h);    
+    virtual vector<float> compute_noise(const vector<float> &x_i,const float* h);    
 
 };
 
@@ -41,13 +42,13 @@ class WienerEuler: public NoiseClass{
     
 public:
 
-    //COSTRUCTOR: the distribution and the generator are initialized.
+    //CONSTRUCTOR: initializes the distribution and random generator.
     //The seed of the random engine is created starting from the time and the point of the instance.
     WienerEuler();
 
     //Compute a dW kind of step for the Wiener process using the Euler-Maruyama method. 
     //Actually a vector of the same size of the system is returned and, in each slot, there is a different dW. 
-    vector<float> compute_noise(const vector<float> &x_i,float* h) override;
+    vector<float> compute_noise(const vector<float> &x_i, const float* h) override;
 
 };
 
@@ -62,14 +63,14 @@ class WienerMilstein: public NoiseClass{
 
 public:
 
-    //CONTRUCTOR: the distribution and the generator are initialize. 
+    //CONSTRUCTOR: the distribution and the generator are initialize. 
     //Moreover, requires as argument the derivative of the g_function used in the field class.
     //The seed of the random engine is created starting from the time and the point of the instance.
-    WienerMilstein(function<vector<float>(const vector<float>&)> derivative = nullptr);
+    WienerMilstein(const function<vector<float>(const vector<float>&)>& derivative = nullptr);
 
     //Compute a dW kind-of step for the Wiener process using the Milstein method. 
     //Actually a vector of the same size of the system is returned and, at each step there is a different dW. 
-    vector<float> compute_noise(const vector<float> &x_i,float* h) override;
+    vector<float> compute_noise(const vector<float> &x_i, const float* h) override;
 
 };
 
@@ -87,7 +88,7 @@ class FieldClass{
 protected:
 
     //This public function allow to set the noise of the FieldClass in a controlled way.
-    void setNoise(NoiseClass* N);
+    void setNoise(NoiseClass* const N);
 
     //Function for the deterministic part of the field. To define, please
     //override "f_function_impl" as in documentation.
@@ -101,16 +102,56 @@ protected:
 
 public:
 
-    //Function for the deterministic part of the field. Override this as in
+    //Implementation function for the deterministic part of the field. Override this as in
     //documentation to implement your system.
-    virtual void f_function_impl(const vector<float> &x,float t,vector<float> &y);
+    virtual void f_function_impl(const vector<float> &x,float t,vector<float> &y) const;
 
-    //Function for the deterministic part of the field. Override this as in
+    //Implementation function for the stochastic part of the field. Override this as in
     //documentation to implement your system.
-    virtual void g_function_impl(const vector<float> &x,float t,vector <float> &y);
+    virtual void g_function_impl(const vector<float> &x,float t,vector <float> &y) const;
 
     //This function will give the result of the compute_noise of the local NoiseClass.
-    vector<float> getNoise(const vector<float> &x_i,float* h);
+    vector<float> getNoise(const vector<float> &x_i,const float* h);
+
+};
+
+//################################################# TRAJECTORY #############################################################################
+
+//The Traj class is used to represent a simulated trajectory of a system of SDEs. It is purely an object class to manage easily the values of
+//the variables and the time instants keeping them all in the same place. It is the product of the simulateTrajectory function.
+class Traj{
+
+    vector<float> times; //The vector of the time instant of the trajectory
+    vector<vector<float>> vars; //The 2D array of the system variables. Rows: time; Columns: variables.
+    size_t step_num; //The time length/num of steps of the trajectory.
+
+public:
+
+    //CONSTRUCTOR 1: the time vector and the 2D array of variable values.
+    Traj(vector<float> t,vector<vector<float>> v);
+
+    //CONSTRUCTOR 2: passing another Traj instance.
+    Traj(const Traj& t);
+
+    //####################### GET FUNCTIONS ##############################
+
+    //Return the reference to the vector of the time instants considered in the trajectory.
+    const vector<float>& getTimes() const{
+        return times;
+    }
+
+    //Return the reference to the 2D array of the variables in every time instant of the trajectory.
+    const vector<vector<float>>& getVars() const{
+        return vars;
+    }
+
+    //Return the number of steps/length of the trajectory.
+    const size_t& getLength() const{
+        return step_num;
+    }
+
+    //Given a certain time index, this function will return the situation as a vector of times+vars 
+    vector<float> getInstant(const size_t index) const;
 
 };
 
@@ -123,17 +164,20 @@ class DataLinker{
 
 protected:
 
-    vector<vector<float>> data; //The array of data used in the simulation.
+    Traj data; //The array of data used in the simulation.
     size_t counter{0}; //Used for optimization, indicate the position on data of the previously picked time instant.
 
     //Given a certain time instant, the variable will find the a time-index near the value (the next one). The TimeOptimizationCounter
     //is used to improve performances.
-    size_t findTimeIndex(float t);
+    size_t findTimeIndex(const float t);
 
 public:
 
+    //CONSTRUCTOR
+    DataLinker(const Traj& t);
+
     //Given a certain time instant the getData returns a child-defined float value near to the given time.
-    virtual float getData(float t);
+    virtual float getData(const float t);
 
     //This function is used to reset the TimeOptimizationCounter which is used to optimize the finding process of the time instant during the
     //simulations. 
@@ -154,22 +198,25 @@ class SDE_SS_System{
     unsigned int NumThreads{8}; //The number of threads used for the parallelizable operations.
 
     //################### SUPPORT FUNCTIONS #######################
-    //These functions are used to light the code of other more complex functions.
+    //Helper functions to simplify the logic of higher-level routines.
 
     //This function will perform the checks of the parameters of computeTimePicture.
-    void checkFunctionComputeTimePicture(unsigned int Nsim,bool random_initial,const vector<vector<float>> &x0,function<vector<float>()> random_f);
+    void checkFunctionComputeTimePicture(const unsigned int Nsim, const bool random_initial,const vector<vector<float>> &x0,
+                                        const function<vector<float>()>& random_f);
 
     //This function will perform the checks of the parameters of simulateTrajectory. 
-    void checkTrajInput(const vector<float> &x0,float period, float h_0);
+    void checkTrajInput(const vector<float> &x0,const float period,const float h_0);
 
     //This function will perform the checks of the parameters of PDF_1D.
-    void checkFunctionPDF_1D(const vector<vector<float>> &picture,unsigned int Nbins,unsigned int axis,bool adaptive,const vector<float> &domain);
+    void checkFunctionPDF_1D(const vector<vector<float>> &picture,const unsigned int Nbins,const unsigned int axis,const bool adaptive,
+                            const vector<float> &domain);
 
     //This function will perform the checks of the parameters of PDF_2D.
-    void checkFunctionPDF_2D(const vector<vector<float>> &picture,vector<unsigned int> Nbins,vector<unsigned int> axis,bool adaptive,const vector<float> &domain);
+    void checkFunctionPDF_2D(const vector<vector<float>> &picture,const vector<unsigned int> Nbins,const vector<unsigned int> axis,
+                            const bool adaptive,const vector<float> &domain);
 
     //This function will perform the checks of the parameters of computeAutocorrelation.
-    void checkAutocorrelationInput(const vector<vector<float>> &traj,unsigned int axis,float tau);
+    void checkAutocorrelationInput(const Traj& traj,const unsigned int axis,const float tau);
 
     //################### EVOLUTION FUNCTIONS ####################
     //These functions are used to perform the evolutive aspects of the trajectory's computation.
@@ -194,9 +241,8 @@ public:
     //####################### CORE FUNCTIONS ###################################
 
     //This core function simulate a single trajectory given the initial conditions, the time period and the standard step.
-    //This function will return a 2D vector with all the points of the trajectory. 
-    //In the returning vector the times and the values are conjointed. The first column is used for times.
-    vector<vector<float>> simulateTrajectory(const vector<float> &x0,float period, float h_0);
+    //This function will return an element of Traj class.
+    Traj simulateTrajectory(const vector<float> &x0,const float period,const float h_0);
 
     //This function will automatically produce a group of the trajectories to obtain the value in a time instant. 
     //It requires, in order,:
@@ -209,9 +255,9 @@ public:
     //- Eventually, a time index where the PDF has to be computed. If it is not given, the PDF will be computed
     //  at the last step.
     //The output of the function will be a 2D matrix with the values of each trajectory at the time instant in each row.     
-    vector<vector<float>> produceTimePicture(float period,float h_0,unsigned int Nsim,
-                                            bool random_initial=false,const vector<vector<float>> &x0 = {{}},
-                                            function<vector<float>()> random_f = nullptr,float time_instant = -1.0f);
+    vector<vector<float>> produceTimePicture(const float period,const float h_0,unsigned int Nsim,
+                                            const bool random_initial=false,const vector<vector<float>> &x0 = {{}},
+                                            const function<vector<float>()>& random_f = nullptr,const float time_instant = -1.0f);
 
     //###################### PUBLIC UTILITY FUNCTIONS ##########################
 
@@ -219,7 +265,7 @@ public:
     //and has as input a vector<float> (the point). The function should return "true" when
     //the point is in the domain.
     //The system has to be bounded (construction) to this function to work.
-    void setBoundFunction(function<bool(const vector<float>&)> f);
+    void setBoundFunction(const function<bool(const vector<float>&)>& f);
 
     //This function is used to set the number of threads used by the heavy functions of the class.
     //The standard value is 8.
@@ -227,11 +273,7 @@ public:
 
     //Given a vector of times and a time index this function will find the slot just before the given time instant.
     //This function is also STATIC.
-    static size_t findTimeIndex(const vector<float> &times,float TI);
-
-    //Given a vector of the shape of the one of the simulateTrajectory function,
-    //this function will extract the column of times (column 0). This function is also STATIC.
-    static vector<float> extractTimes(const vector<vector<float>> &traj);
+    static size_t findTimeIndex(const vector<float> &times,const float TI);
 
     //####################### TOOL FUNCTIONS #####################################
     //These function are made to automatize some typical tests and procedure used in the analysis of the SDE.
@@ -265,7 +307,7 @@ public:
     //- The time delay (\tau) of the autocorrelation (MANDATORY).
     //The output will be the autocorrelation value computed as covariance/variance.
     //Also the time delay is converted in the nearest below number of steps.
-    float computeAutocorrelation(const vector<vector<float>> &traj,unsigned int axis,float tau);
+    float computeAutocorrelation(const Traj& traj,unsigned int axis,float tau);
     
 };
 

@@ -232,6 +232,19 @@ vector<float> Traj::getInstant(const size_t index) const{
 }
 
 //##############################################################################################################################################################
+//########################################################### TIME PICTURE #############################################################################
+//##############################################################################################################################################################
+
+//CONSTRUCTOR 1: build using the set of values and the time instant. The set of values must have the different trajectories
+//along the rows and the variables along the columns.
+TimePicture::TimePicture(vector<vector<float>> values,float t): points(values),T(t){
+    N = values.size();
+}
+
+//CONSTURCTOR 2: build copying another TimePicture instance.
+TimePicture::TimePicture(const TimePicture& TP): points(TP.getAllPoints()),T(TP.getTimeInstant()),N(TP.getNumSim()){}
+
+//##############################################################################################################################################################
 //######################################################### SYSTEM #############################################################################################
 //##############################################################################################################################################################
 
@@ -346,7 +359,7 @@ Traj SDE_SS_System::simulateTrajectory(const vector<float> &x0,const float perio
 //- Eventually, a time index where the PDF has to be computed. If it is not given, the PDF will be computed
 //  at the last step.
 //The output of the function will be a 2D matrix with the values of each trajectory at the time instant in each row.     
-vector<vector<float>> SDE_SS_System::produceTimePicture(const float period,const float h_0,unsigned int Nsim,
+TimePicture SDE_SS_System::produceTimePicture(const float period,const float h_0,unsigned int Nsim,
                                                         const bool random_initial,const vector<vector<float>> &x0 ,
                                                         const function<vector<float>()>& random_f,const float time_instant)
 {
@@ -355,11 +368,15 @@ vector<vector<float>> SDE_SS_System::produceTimePicture(const float period,const
 
     //2. Now we can start to produce the simulations and extract the points.
     //We will work using OpenMP to optimize the performances.
-    vector<vector<float>> picture;
+    vector<vector<float>> points;
 
     //2.1 Assign at each threads its quota. The master will have also the remainder
     vector<unsigned int> quota(NumThreads,0);
     vector<unsigned int> cumulative_quota(NumThreads,0); //Used for initial conditions
+
+    //2.1.2 The time instant, when not given, is computed using the mean of the values of the last time instant
+    //of the simulated trajectories.
+    vector<float> time_instants;
 
     quota[0] = (Nsim / NumThreads) + (Nsim % NumThreads);
     cumulative_quota[0] = 0;
@@ -373,7 +390,8 @@ vector<vector<float>> SDE_SS_System::produceTimePicture(const float period,const
         const unsigned int ID = omp_get_thread_num(); //Get thread ID
 
         //2.2 We create the local storaging thus each thread can 
-        vector<vector<float>> local_picture(quota[ID],vector<float>(size+1,0.0));
+        vector<vector<float>> local_points(quota[ID],vector<float>(size+1,0.0));
+        vector<float> local_time_instants(quota[ID],0.0);
 
         //2.3 Start to produce the trajectories
         for(size_t i=0;i<quota[ID];i++){
@@ -399,20 +417,34 @@ vector<vector<float>> SDE_SS_System::produceTimePicture(const float period,const
                 time_index = findTimeIndex(traj.getTimes(),time_instant);
             }
 
-            local_picture[i] = traj.getInstant(time_index);
+            local_points[i] = traj.getInstant(time_index);
+            local_time_instants[i] = (traj.getTimes()).back();
         }
 
         //Reunite all the values
         #pragma omp critical
         {
             for(size_t i=0;i<quota[ID];i++){
-                picture.emplace_back(move(local_picture[i]));
+                points.emplace_back(move(local_points[i]));
+                time_instants.emplace_back(move(local_time_instants[i]));
             }
         }
 
     }
 
-    return picture;
+    //2.4: If is negative (last point), compute the time instant as the mean
+    float mean_time_instant{0.0};
+    if(time_instant<=0){
+        for(size_t i=0;i<Nsim;i++){
+            mean_time_instant += time_instants[i];
+        }
+        mean_time_instant = mean_time_instant/(1.0f/Nsim);
+    }
+    else{
+        mean_time_instant = time_instant;
+    }
+
+    return TimePicture(points,mean_time_instant);
 }
 
 //################### PUBLIC UTILITY FUNCTIONS ####################################
@@ -441,31 +473,31 @@ void SDE_SS_System::setNumThreads(unsigned int N){
 
 //This function will produce starting from a TimePicture such the one produced by "produceTimePicture" a 1D bin
 //system useful to obtain PDFs. This function require:
-//- The TimePicture style vector<vector<float>> (MANDATORY).
+//- A TimePicture (MANDATORY).
 //- The number of bins (MANDATORY).
 //- The axis along which doing the bins (0: times,n: the n variable of the system) (MANDATORY).
 //- A bool to express if the binning domain is given or adaptive (true = adaptive).
 //- If false a vector with upper and lower domain is required.
 //The function will return a 2D vector with in each row the central value (first column) and the bin value (second column).
-vector<vector<float>> SDE_SS_System::PDF_1D(const vector<vector<float>> &picture,unsigned int Nbins,unsigned int axis,
+vector<vector<float>> SDE_SS_System::PDF_1D(const TimePicture& picture,unsigned int Nbins,unsigned int axis,
                                             bool adaptive,vector<float> domain)
 {
     //0. Create the bin vector
     vector<vector<float>> bins(Nbins,vector<float>(2,0.0));
 
     //1. Perform some checks on the arguments:
-    checkFunctionPDF_1D(picture,Nbins,axis,adaptive,domain);
+    checkFunctionPDF_1D(Nbins,axis,adaptive,domain);
 
     //2. If the domain is adaptive we need to find the extremes
     vector<float> extremes(2,0.0);
     
     if(adaptive){
-        extremes[0] = picture[0][axis]; //The min
+        extremes[0] = picture.getPoint(0)[axis]; //The min
         extremes[1] = extremes[0]; //The max
 
-        for(unsigned long int i=0;i<picture.size();i++){
-            if(picture[i][axis]<extremes[0]) extremes[0]=picture[i][axis];
-            if(picture[i][axis]>extremes[1]) extremes[1]=picture[i][axis];
+        for(unsigned long int i=0;i<picture.getNumSim();i++){
+            if(picture.getPoint(i)[axis]<extremes[0]) extremes[0]=picture.getPoint(i)[axis];
+            if(picture.getPoint(i)[axis]>extremes[1]) extremes[1]=picture.getPoint(i)[axis];
         }
     }
     else{ //Domain is passed
@@ -490,9 +522,9 @@ vector<vector<float>> SDE_SS_System::PDF_1D(const vector<vector<float>> &picture
     //5.1 This time we need to compute the quotas before:
     vector<int> quotas(NumThreads+1,0);
     quotas[0] = 0;
-    quotas[1] = picture.size()/NumThreads + picture.size()%NumThreads;
+    quotas[1] = picture.getNumSim()/NumThreads + picture.getNumSim()%NumThreads;
     for(size_t i=1;i<NumThreads;i++){
-        quotas[i+1] = quotas[i] + picture.size()/NumThreads;
+        quotas[i+1] = quotas[i] + picture.getNumSim()/NumThreads;
     }
 
     //5.2 We can work on the bins in a parallel way
@@ -504,7 +536,7 @@ vector<vector<float>> SDE_SS_System::PDF_1D(const vector<vector<float>> &picture
 
         for(size_t i=quotas[ID];i<quotas[ID+1];i++){
             for(size_t j=0;j<Nbins;j++){
-                if(picture[i][axis]<=limits[j]){
+                if(picture.getPoint(i)[axis]<=limits[j]){
                     local_bins[j] += 1.0;
                     break;
                 }
@@ -521,40 +553,39 @@ vector<vector<float>> SDE_SS_System::PDF_1D(const vector<vector<float>> &picture
     }
 
     return bins;
-
 }  
 
 //This function will produce starting from a Time Picture such the one produced by "produceTimePicture" a 2D bin
 //system useful to obtain PDFs, This function require:
-//- The TimePicture style vector<vector<float>> (MANDATORY).
+//- A TimePicture (MANDATORY).
 //- A 2D vector for the number of bins along the axis (MANDATORY).
 //- A 2D vector of the axis along which doing the bins (0: times,n: the n variable of the system) (MANDATORY).
 //- A bool to express if the binning domain is given or adaptive (true = adaptive).
 //- If false a vector with upper and lower domain is required. It should be a 4 slot vector (lb,ub,lb,ub).
 //The function will return a 2D vector with in each row the central value coordinates (firsts 2 column) and the bin value (last column).
-vector<vector<float>> SDE_SS_System::PDF_2D(const vector<vector<float>> &picture,vector<unsigned int> Nbins,vector<unsigned int> axis,
+vector<vector<float>> SDE_SS_System::PDF_2D(const TimePicture& picture,vector<unsigned int> Nbins,vector<unsigned int> axis,
                             bool adaptive, vector<float> domain)
 {
     //0. Create the bin vector
     vector<vector<float>> bins(Nbins[0]*Nbins[1],vector<float>(3,0.0));
 
     //1. Perform some checks on the arguments:
-    checkFunctionPDF_2D(picture,Nbins,axis,adaptive,domain);
+    checkFunctionPDF_2D(Nbins,axis,adaptive,domain);
 
     //2. If the domain is adaptive we need to find the extremes
     vector<float> extremes(4,0.0);
     
     if(adaptive){
-        extremes[0] = picture[0][axis[0]]; //The min
+        extremes[0] = picture.getPoint(0)[axis[0]]; //The min
         extremes[1] = extremes[0]; //The max
-        extremes[2] = picture[0][axis[1]]; //The min
+        extremes[2] = picture.getPoint(0)[axis[1]]; //The min
         extremes[3] = extremes[2]; //The max
 
-        for(unsigned long int i=0;i<picture.size();i++){
-            if(picture[i][axis[0]]<extremes[0]) extremes[0]=picture[i][axis[0]];
-            if(picture[i][axis[0]]>extremes[1]) extremes[1]=picture[i][axis[0]];
-            if(picture[i][axis[1]]<extremes[2]) extremes[2]=picture[i][axis[1]];
-            if(picture[i][axis[1]]>extremes[3]) extremes[3]=picture[i][axis[1]];
+        for(unsigned long int i=0;i<picture.getNumSim();i++){
+            if(picture.getPoint(i)[axis[0]]<extremes[0]) extremes[0]=picture.getPoint(i)[axis[0]];
+            if(picture.getPoint(i)[axis[0]]>extremes[1]) extremes[1]=picture.getPoint(i)[axis[0]];
+            if(picture.getPoint(i)[axis[1]]<extremes[2]) extremes[2]=picture.getPoint(i)[axis[1]];
+            if(picture.getPoint(i)[axis[1]]>extremes[3]) extremes[3]=picture.getPoint(i)[axis[1]];
         }
     }
     else{ //Domain is passed
@@ -594,9 +625,9 @@ vector<vector<float>> SDE_SS_System::PDF_2D(const vector<vector<float>> &picture
     //5.1 This time we need to compute the quotas before:
     vector<int> quotas(NumThreads+1,0);
     quotas[0] = 0;
-    quotas[1] = picture.size()/NumThreads + picture.size()%NumThreads;
+    quotas[1] = picture.getNumSim()/NumThreads + picture.getNumSim()%NumThreads;
     for(size_t i=1;i<NumThreads;i++){
-        quotas[i+1] = quotas[i] + picture.size()/NumThreads;
+        quotas[i+1] = quotas[i] + picture.getNumSim()/NumThreads;
     }
 
     //5.2 We can work on the bins in a parallel way
@@ -609,7 +640,7 @@ vector<vector<float>> SDE_SS_System::PDF_2D(const vector<vector<float>> &picture
         for(size_t i=quotas[ID];i<quotas[ID+1];i++){
             for(size_t j=0;j<Nbins[0];j++){
                 for(size_t k=0;k<Nbins[1];k++){
-                    if((picture[i][axis[0]]<=limits_0[j])&&(picture[i][axis[1]]<=limits_1[k])){
+                    if((picture.getPoint(i)[axis[0]]<=limits_0[j])&&(picture.getPoint(i)[axis[1]]<=limits_1[k])){
                         local_bins[j*Nbins[1]+k] += 1.0;
                         break;
                     }
@@ -637,7 +668,7 @@ vector<vector<float>> SDE_SS_System::PDF_2D(const vector<vector<float>> &picture
 //autocorrelation of the trajectory for a certain time delay. This function require:
 //- A trajectory in style vector<vector<float>> (MANDATORY).
 //- The axis (variable) along which computing the autocorrelation (MANDATORY).
-//- The time delay (\tau) of the autocorrelation (MANDATORY).
+//- The time delay (tau) of the autocorrelation (MANDATORY).
 //The output will be the autocorrelation value computed as covariance/variance.
 //Also the time delay is converted in the nearest below number of steps.
 float SDE_SS_System::computeAutocorrelation(const Traj& traj,unsigned int axis,float tau){
@@ -705,22 +736,18 @@ size_t SDE_SS_System::findTimeIndex(const vector<float> &times,const float TI){
 }
 
 //This function will perform the checks of the parameters of PDF_1D.
-void SDE_SS_System::checkFunctionPDF_1D(const vector<vector<float>> &picture,const unsigned int Nbins,const unsigned int axis,
-                                        const bool adaptive,const vector<float> &domain){
-    //Check the picture size is equal to the system size, the number of bins meaningful,
-    //the axis is not bigger than the dimensionality and the domain is valid.
-    if(picture[0].size()!=(size+1)) error("SDE_SS_System: PDF_1D: Runtime error: Time Picture passed has a size incompatible with the problem.");
+void SDE_SS_System::checkFunctionPDF_1D(const unsigned int Nbins,const unsigned int axis,const bool adaptive,const vector<float> &domain){
+    //Check if the number of bins meaningful, the axis is not bigger than the dimensionality and the domain is valid.
     if(Nbins<1) error("SDE_SS_System: PDF_1D: Runtime error: Number of bins passed is less than 1.");
     if(axis>=(size+1)) error("SDE_SS_System: PDF_1D: Runtime error: No variable associated with that axis of the system.");
     if(domain[0]==domain[1]) error("SDE_SS_System: PDF_1D: Runtime error: Undefined or domain with equal extremes.");
 }
 
 //This function will perform the checks of the parameters of PDF_2D.
-void SDE_SS_System::checkFunctionPDF_2D(const vector<vector<float>> &picture,const vector<unsigned int> Nbins,const vector<unsigned int> axis,
+void SDE_SS_System::checkFunctionPDF_2D(const vector<unsigned int> Nbins,const vector<unsigned int> axis,
                                         const bool adaptive,const vector<float> &domain){
-    //1.1 Check the picture size is equal to the system size, the number of bins meaningful
+    //1.1 Check if the number of bins meaningful
     //the axis is not bigger than the dimensionality and the domain is valid. This is done for both the axis.
-    if(picture[0].size()!=(size+1)) error("SDE_SS_System: PDF_2D: Runtime error: Time Picture passed has a size incompatible with the problem.");
     if(Nbins[0]<1 || Nbins[1]<1) error("SDE_SS_System: PDF_2D: Runtime error: Number of bins passed is less than 1.");
     if(axis[0]>=(size+1) || axis[1]>=(size+1)) error("SDE_SS_System: PDF_2D: Runtime error: No variable associated with that axis of the system.");
     if(domain[0]==domain[1]||domain[2]==domain[3]) error("SDE_SS_System: PDF_2D: Runtime error: Undefined or domain with equal extremes.");

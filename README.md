@@ -1,4 +1,4 @@
-# SDE-SS (Stochastic Differential Equation - Super Solver) v. 1.3.1
+# SDE-SS (Stochastic Differential Equation - Super Solver) v. 1.3.2
 
 This repository contains the C++ library SDE-SS made mainly to compute trajectories of systems of SDEs. Moreover, useful related function are also integrated.
 The main part of the library is contained inside the "Core" subdirectory. Here there are all the most important and fundamental part that allow you to simulate

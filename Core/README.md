@@ -54,8 +54,20 @@ by the other classes of the library. To see how to override these two, please lo
 
 This class is used to represent a trajectory of a system of SDEs. This is the type of output produced by the *simulateTrajectory* function of a *SDE_SS_System* instance. This a purely object and it is made more for memory optimization, tidiness of the code and unambiguousness. The class contains three elements: the vector of the time instants considered in the simulation, a 2D matrix of the values of the variables with the rows symbolizing the different time instants and the number of steps. It can be built both passing another *Traj* element or passing separately the times vector and the 2D matrix (in this case some checks are performed). Once a *Traj* is built there are no way to change the internal values.
 
-- *void getTimes()*, *void getVars()*, *void getLenght()*: these 3 get functions return respectively the three internal variables of the trajectory.
-- *vector&lt;float&gt; getInstant(size_t TI)*: given a certain time index, this function will return the features of the system at that index. The output is a vector 		with the time at the 0th slot and then the values of the variables in the same order in which are saved along the columns of the 2D matrix.   
+- *getTimes()*, *getVars()*, *getLenght()*: these 3 get functions return respectively the three internal variables of the trajectory.
+- *vector&lt;float&gt; getInstant(size_t TI)*: given a certain time index, this function will return the features of the system at that index. The output is a vector 		with the time at the 0th slot and then the values of the variables in the same order in which are saved along the columns of the 2D matrix.
+
+## Time Picture ("TimePicture"):
+
+This class is used to represent the concept of "time picture": this is a set of N points taken from N simulated trajectory of the SDEs system at a given
+time instant T. It is like taking a picture of the system situation after a certain time T collecting the values that the set of N trajectory had at that
+moment. As the Trajectory class, this is purely an object class to manage easily th values of the trajectories at that time instant. It is the product
+of the *computeTimePicture* function. In *TimePicture*, there are stored the values in a 2D array with along the rows the different simulations and along
+the columns the variables of the SDEs system. There are also saved the time instant of reference and the number of simulations.
+
+- *getAllPoints()*, *getNumSim()*, *getTimeInstant()*: these 3 get functions return respectively the three internal variables of the trajectory.
+- *vector&lt;float&gt;& getPoint(size_t p)*: given a specific simulation by index with p, this function return the values of that simulation at the time instant of
+	the time picture.
 
 ## Data Linker ("DataLinker"):
 
@@ -91,9 +103,8 @@ aspect of your system.
 	using an evolution method based on a Strang splitting treating the deterministic part with a RK4 method and the deterministic part depending on the *NoiseClass*
 	*compute_noise* method of implementation (e.g. Euler-Maruyama for *WienerEuler*). The trajectory will be produced as a Traj object (see above).
 	It requires as input a vector representing the initial condition, the length of the simulation and the base time step of the trajectory.
-- *vector&lt;vector&lt;float&gt;&gt; produceTimePicture(\[TOO MANY\])*: this complex function produced a so-called Time Picture (maybe in the future it will have
-	its own class). A Time Picture is, given a set of trajectories, the set of the values of the trajectories in a given time instant. This function requires a
-	lot of arguments but produces its own trajectories internally. Therefore it needs:
+- *TimePicture produceTimePicture(\[TOO MANY\])*: this complex function produced a so-called Time Picture. A Time Picture is, given a set of trajectories, 
+	the set of the values of the trajectories in a given time instant. This function requires a lot of arguments but produces its own trajectories internally. Therefore it needs:
 
 	- The length of the simulations.
 	- The base step of the simulations.
@@ -104,7 +115,7 @@ aspect of your system.
 	- At last, if you want a particular time instant inside of the trajectory you need to pass it to the function, otherwise the last step values
 		are used.
 
-	Doing this, this function will return a vector&lt;vector&lt;float&gt;&gt; with in each row the values of the time and the variables at the time instant of one of the trajectories.
+	Doing this, this function will return a TimePicture instance.
 
 ### Public Utility functions:
 
@@ -128,7 +139,7 @@ The Tool functions are functions (most of them heavy) that elaborates trajectori
 - *vector&lt;vector&lt;float&gt;&gt; PDF_1D(\[TOO MANY\])*: the idea is fairly simple: given a time picture and chosen a variable, this function will produce a bins
 	system of same width along that variable ("axis"). Certainly, there are some features to define with the arguments:
 
-	- As first argument, you have to pass a time picture as the one produced by *produceTimePicture* (*vector&lt;vector&lt;float&gt;&gt;*).
+	- As first argument, you have to pass a time picture as the one produced by *produceTimePicture* (*TimePicture*).
 	- The number of bins to create.
 	- The axis along which the bins are created (0th: time, nth: the nth-variable).
 	- A boolean variable to tell if the bins system should be adaptive. An adaptive bin domains means that the function will find the minimum and the maximum value

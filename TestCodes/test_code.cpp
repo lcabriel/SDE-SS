@@ -106,9 +106,9 @@ int main(){
     //Computing the PDF is heavy so we increase the number of threads used by heavy operations from 8 to 10
     system.setNumThreads(10);
 
-    /*We want our PDF in the instant equal to the last step thus we need to create first a Time Picture of the system.
-    This is a vector<vector<float>> with the number of row equal to the number of simulations used to describe the time picture.
-    For each row we have first the time and then the values of the variables in orded at that time instant.
+    /*We want our PDF in the instant equal to the last step thus we need to create first a TimePicture of the system.
+    The points in the TimePicture are stored in a 2D array with along the row the trajectories and along the columns
+    the variables. The values are taken at the time instant where the TimePicture is taken. 
     Wanting to have the last step for our PDF, we need only to specify certain arguments of this function:
     - 1°: it is the length of our simulations
     - 2°: the step size of the simulations
@@ -117,7 +117,7 @@ int main(){
     - 5°: being not fixed, we need the initial condition functions. If fixed an array x0 is required
     - 6° (NOT VISIBLE): is the time instant, if not specified it is the last step of the trajectories.
     */
-    vector<vector<float>> picture=system.produceTimePicture(2000,0.01,50,true,{{}},initial_cond_function);
+    TimePicture picture=system.produceTimePicture(2000,0.01,50,true,{{}},initial_cond_function);
 
     //Created the time picture we can transform it into a 1D bin. We need to pass it to the PDF_1D function with:
     //2°: the number of bins

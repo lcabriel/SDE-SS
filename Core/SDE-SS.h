@@ -150,8 +150,52 @@ public:
         return step_num;
     }
 
-    //Given a certain time index, this function will return the situation as a vector of times+vars 
+    //Given a certain time index, this function will return the situation as a vector of times+vars. 
     vector<float> getInstant(const size_t index) const;
+
+};
+
+//################################################# TIME PICTURE ###########################################################################
+
+//This TimePicture class is used to represent a so-called time picture: a set of N points taken from N simulated trajectory of a SDEs system
+//at a given time instant T. As Traj, this is purely an object class to manage easily the values of the trajectories at that time instant.
+//It is the product of the computeTimePicture function.
+class TimePicture{
+
+    vector<vector<float>> points; //The values of the N simulations at the time instant T. (row,columns)=(trajs,variables).
+    size_t N; //The number of simulations.
+    float T; //The time instant.
+
+public:
+
+    //CONSTRUCTOR 1: build using the 2D array of values and the time instant. The set of values must have the different trajectories
+    //along the rows and the variables along the columns.
+    TimePicture(vector<vector<float>> values,float t);
+
+    //CONSTURCTOR 2: build copying another TimePicture instance.
+    TimePicture(const TimePicture& TP);
+
+    //####################### GET FUNCTIONS ##############################
+
+    //Return the reference to the 2D array of the values of the different trajectories at the time instant of the picture.   
+    const vector<vector<float>>& getAllPoints() const{
+        return points;
+    }
+
+    //Return the reference to the array of the values of a specific trajectory "p" at the time instant of the picture. 
+    const vector<float>& getPoint(size_t p) const{
+        return points[p];
+    }
+
+    //Return the reference to the total number of trajectories composing the TimePicture.
+    const size_t& getNumSim() const{
+        return N;
+    }
+
+    //Return the reference to the value identifying the time instant of the TimePicture.  
+    const float& getTimeInstant() const{
+        return T;
+    }
 
 };
 
@@ -208,12 +252,10 @@ class SDE_SS_System{
     void checkTrajInput(const vector<float> &x0,const float period,const float h_0);
 
     //This function will perform the checks of the parameters of PDF_1D.
-    void checkFunctionPDF_1D(const vector<vector<float>> &picture,const unsigned int Nbins,const unsigned int axis,const bool adaptive,
-                            const vector<float> &domain);
+    void checkFunctionPDF_1D(const unsigned int Nbins,const unsigned int axis,const bool adaptive,const vector<float> &domain);
 
     //This function will perform the checks of the parameters of PDF_2D.
-    void checkFunctionPDF_2D(const vector<vector<float>> &picture,const vector<unsigned int> Nbins,const vector<unsigned int> axis,
-                            const bool adaptive,const vector<float> &domain);
+    void checkFunctionPDF_2D(const vector<unsigned int> Nbins,const vector<unsigned int> axis,const bool adaptive,const vector<float> &domain);
 
     //This function will perform the checks of the parameters of computeAutocorrelation.
     void checkAutocorrelationInput(const Traj& traj,const unsigned int axis,const float tau);
@@ -255,7 +297,7 @@ public:
     //- Eventually, a time index where the PDF has to be computed. If it is not given, the PDF will be computed
     //  at the last step.
     //The output of the function will be a 2D matrix with the values of each trajectory at the time instant in each row.     
-    vector<vector<float>> produceTimePicture(const float period,const float h_0,unsigned int Nsim,
+    TimePicture produceTimePicture(const float period,const float h_0,unsigned int Nsim,
                                             const bool random_initial=false,const vector<vector<float>> &x0 = {{}},
                                             const function<vector<float>()>& random_f = nullptr,const float time_instant = -1.0f);
 
@@ -280,31 +322,31 @@ public:
 
     //This function will produce starting from a TimePicture such the one produced by "produceTimePicture" a 1D bin
     //system useful to obtain PDFs. This function require:
-    //- The TimePicture style vector<vector<float>> (MANDATORY).
+    //- A TimePicture (MANDATORY).
     //- The number of bins (MANDATORY).
     //- The axis along which doing the bins (0: times,n: the n variable of the system) (MANDATORY).
     //- A bool to express if the binning domain is given or adaptive (true = adaptive).
     //- If false a vector with upper and lower domain is required.
     //The function will return a 2D vector with in each row the central value (first column) and the bin value (second column).
-    vector<vector<float>> PDF_1D(const vector<vector<float>> &picture,unsigned int Nbins,unsigned int axis,
+    vector<vector<float>> PDF_1D(const TimePicture& picture,unsigned int Nbins,unsigned int axis,
                                 bool adaptive = false,vector<float> domain = {0.0,0.0}); 
     
     //This function will produce starting from a Time Picutre such the one produced by "produceTimePicture" a 2D bin
     //system useful to obtain PDFs, This function require:
-    //- The TimePicture style vector<vector<float>> (MANDATORY).
+    //- A TimePicture (MANDATORY).
     //- A 2D vector for the number of bins along the axis (MANDATORY).
     //- A 2D vector of the axis along which doing the bins (0: times,n: the n variable of the system) (MANDATORY).
     //- A bool to express if the binning domain is given or adaptive (true = adaptive).
     //- If false a vector with upper and lower domain is required. It should be a 4 slot vector (lb,ub,lb,ub).
     //The function will return a 2D vector with in each row the central value coordinates (firsts 2 column) and the bin value (last column).
-    vector<vector<float>> PDF_2D(const vector<vector<float>> &picture,vector<unsigned int> Nbins,vector<unsigned int> axis,
+    vector<vector<float>> PDF_2D(const TimePicture& picture,vector<unsigned int> Nbins,vector<unsigned int> axis,
                                 bool adaptive = false, vector<float> domain = {0.0,0.0,0.0,0.0});
 
     //This function will produce, starting from a trajectory such the one produced by "produceTimePicture" the
     //autocorrelation of the trajectory for a certain time delay. This function require:
     //- A trajectory in style vector<vector<float>> (MANDATORY).
     //- The axis (variable) along which computing the autocorrelation (MANDATORY).
-    //- The time delay (\tau) of the autocorrelation (MANDATORY).
+    //- The time delay (tau) of the autocorrelation (MANDATORY).
     //The output will be the autocorrelation value computed as covariance/variance.
     //Also the time delay is converted in the nearest below number of steps.
     float computeAutocorrelation(const Traj& traj,unsigned int axis,float tau);

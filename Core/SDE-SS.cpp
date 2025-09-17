@@ -164,44 +164,70 @@ vector<float> FieldClass::getNoise(const vector<float> &x_i,const float* h){
 //########################################################### DATALINKER #############################################################################
 //##############################################################################################################################################################
 
-//CONSTRUCTOR:
-DataLinker::DataLinker(const Traj& t): data(t){}
+//CONSTRUCTOR 1: passing a traj and specifying if is adaptive
+DataLinker::DataLinker(const Traj& t,const bool AS): data(t), adapting_set(AS){}
 
-//Given a certain time instant, the variable will find the a time-index near the value (the previous one). The TimeOptimizationCounter
-//is used to improve performances.
+//CONSTRUCTOR 2: copying a DataLinker
+DataLinker::DataLinker(const DataLinker& DL): data(DL.data), adapting_set(DL.adapting_set){}
+
+//Given a certain time instant, the variable will find the a time-index near the value (the next one). The TimeOptimizationCounter
+//is used to improve performances allowing the bypass of this function when multiple getData access to the sime time index (see examples).
 size_t DataLinker::findTimeIndex(const float t){
     //1. Try to look if is the same time
-    if((t>=data.getTimes()[counter])&&(t<data.getTimes()[counter+1])){
-        return counter;
+    if((t>=data.getTimes()[TOC])&&(t<data.getTimes()[TOC+1])){
+        return TOC;
     }
     //2. Try to find if it is after the counter
-    for(size_t i=counter+1;i<data.getLength();i++){
+    for(size_t i=TOC+1;i<data.getLength();i++){
         if((t>=data.getTimes()[i])&&(t<data.getTimes()[i+1])){
-            counter = i;
+            TOC = i;
             return i;
         }
     }
     //3. Otherwise is before
-    for(size_t i=0;i<counter;i++){
+    for(size_t i=0;i<TOC;i++){
         if((t>=data.getTimes()[i])&&(t<data.getTimes()[i+1])){
-            counter = i;
+            TOC = i;
             return i;
         }        
     }
 
-    cout << "DataLinker: findTimeIndex: Runtime error: time instant not found: " << data.getTimes()[counter] << endl;
+    cout << "DataLinker: findTimeIndex: Runtime error: time instant outside of the domain." << endl;
     exit(401);
 }
 
+//This function is made to be used inside of getData. It allows, instead of using the time index found with findTimeIndex, to obtain a sort
+//in-between value in the dataset using a linear interpolator between the previous and the next point along the given variable.
+//WARNING: this function could increase significatly your computation times and it is made for dataset characterised by a wide grid.
+float DataLinker::interpolData(const float& t,const unsigned int& var){
+    size_t t_i = findTimeIndex(t);
+
+    const float y1 = data.getVars()[t_i][var];
+    const float y2 = data.getVars()[t_i + 1][var];
+    const float x1 = data.getTimes()[t_i];
+    const float x2 = data.getTimes()[t_i + 1];
+
+    return (y1+(t-x1)*(y2-y1)/(x2-x1));
+}
+
 //Given a certain time instant the getData returns a child-defined float value near to the given time.
-float DataLinker::getData(const float t){
+float DataLinker::getData(const float t,const vector<float>& x){    
     return 0.0;
+}
+
+//This function allow, if the DataLinker is adaptive, to pass a new set of data to the DataLinker.
+void DataLinker::setNewData(const Traj& t){
+    if(adapting_set) data=t;
+    else{
+        cout << "DataLinker: setNewData: Runtime error: trying to change the data set of a non-adaptive DataLinker instance." << endl;
+        exit(402);
+    }
 }
 
 //This function is used to reset the TimeOptimizationCounter which is used to optimize the finding process of the time instant during the
 //simulations. 
 void DataLinker::resetTimeOptimizationCounter(){
-    counter=0;
+    TOC=0;
 }
 
 //##############################################################################################################################################################

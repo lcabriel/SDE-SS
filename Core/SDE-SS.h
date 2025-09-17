@@ -209,19 +209,31 @@ class DataLinker{
 protected:
 
     Traj data; //The array of data used in the simulation.
-    size_t counter{0}; //Used for optimization, indicate the position on data of the previously picked time instant.
+    const bool adapting_set; //Used to express if the set can change according to the variables of the system where the DataLinker is used.
+    size_t TOC{0}; //TimeOptimizationCounter: used for optimization, indicate the position on data of the previously picked time instant.
 
     //Given a certain time instant, the variable will find the a time-index near the value (the next one). The TimeOptimizationCounter
-    //is used to improve performances.
+    //is used to improve performances allowing the bypass of this function when multiple getData access to the sime time index (see examples).
     size_t findTimeIndex(const float t);
+
+    //This function is made to be used inside of getData. It allows, instead of using the time index found with findTimeIndex, to obtain a sort
+    //in-between value in the dataset using a linear interpolator between the previous and the next point along the given variable.
+    //WARNING: this function could increase significatly your computation times and it is made for dataset characterised by a wide grid.
+    float interpolData(const float& t,const unsigned int& variable);
 
 public:
 
-    //CONSTRUCTOR
-    DataLinker(const Traj& t);
+    //CONSTRUCTOR 1: passing a traj and specifying if is adaptive
+    DataLinker(const Traj& t,const bool AS);
 
-    //Given a certain time instant the getData returns a child-defined float value near to the given time.
-    virtual float getData(const float t);
+    //CONSTRUCTOR 2: copying a DataLinker
+    DataLinker(const DataLinker& DL);
+
+    //Given a certain time instant (and sys vars for adapting sets), the getData returns a child-defined float value near to the given time.
+    virtual float getData(const float t,const vector<float>& x);
+
+    //This function allow, if the DataLinker is adaptive, to pass a new set of data to the DataLinker.
+    void setNewData(const Traj& t);
 
     //This function is used to reset the TimeOptimizationCounter which is used to optimize the finding process of the time instant during the
     //simulations. 

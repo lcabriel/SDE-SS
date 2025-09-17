@@ -83,16 +83,16 @@ class myDataLinker: public DataLinker{
 public:
 
     //In the constructor we pass the data of the trajectory.
-    myDataLinker(const Traj& traj): DataLinker(traj){}
+    myDataLinker(const Traj& traj,const bool AS): DataLinker(traj,AS){}
 
     //To get the first variable.
-    float getData(const float t) override{
+    float getData(const float t,const vector<float>& x) override{
         return data.getVars()[findTimeIndex(t)][0];
     }
 
     //To get the second variable.
-    float getData2(const float t){
-        return data.getVars()[counter][1];
+    float getData2(const float t,const vector<float>& x){
+        return data.getVars()[TOC][1];
     }
 
 };
@@ -115,8 +115,8 @@ public:
 
     //The f_function definition: let's suppose that the field with data linker is only 2D because is a different system.
     void f_function_impl(const vector<float> &x,float t,vector<float> &y) const override{
-        y[0] = (linker->getData(t)-x[0])/tau;
-        y[1] = (linker->getData2(t)-x[1])/tau;
+        y[0] = (linker->getData(t,x)-x[0])/tau;
+        y[1] = (linker->getData2(t,x)-x[1])/tau;
     }
 
     //The same can be said for the g_function.
@@ -147,7 +147,7 @@ int main(){
 
     //Prepare the element of the second system
     WienerEuler noise2;
-    myDataLinker linker(traj1);
+    myDataLinker linker(traj1,false);
     DataField field2(1.0,&linker,&noise2);
 
     //We can now create the second system

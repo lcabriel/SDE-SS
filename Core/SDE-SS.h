@@ -11,6 +11,7 @@
 #include <stdexcept>
 #include <cstdint>
 #include <omp.h>
+#include <algorithm>
 
 using namespace std;
 
@@ -127,8 +128,8 @@ class Traj{
 
 public:
 
-    //CONSTRUCTOR 1: the time vector and the 2D array of variable values.
-    Traj(vector<float> t,vector<vector<float>> v);
+    //CONSTRUCTOR 1: the time vector and the 2D array of variable values using std::move.
+    Traj(vector<float>&& t,vector<vector<float>>&& v);
 
     //CONSTRUCTOR 2: passing another Traj instance.
     Traj(const Traj& t);
@@ -241,6 +242,38 @@ public:
 
 };
 
+//################################################# SET OF POINTS ##########################################################################
+
+//The SetOfPoints is conceptually very similar to the trajectory. It shares a lot of the characteristics and public functions but instead
+//of having all the points of the trajectory it contains only a set of it that are meaningful for the user. It is the product of
+//simulateTrajectorySOP function.
+class SetOfPoints{
+
+    vector<float> times; //The vector of the time instants of the set
+    vector<vector<float>> vars; //The 2D array of the system variables. Rows: time instants; Columns: variables.
+
+public:
+
+    //CONSTRUCTOR 1: the time instants vector and the 2D array of variable values using std::move.
+    SetOfPoints(vector<float>&& t,vector<vector<float>>&& v);
+
+    //CONSTRUCTOR 2: passing another SetOfPoints instance.
+    SetOfPoints(const SetOfPoints& sop);
+
+    //####################### GET FUNCTIONS ##############################
+
+    //Return the reference to the vector of the time instants considered in the set.
+    const vector<float>& getTimes() const{
+        return times;
+    }
+
+    //Return the reference to the 2D array of the variables in every time instant of the set.
+    const vector<vector<float>>& getVars() const{
+        return vars;
+    }
+
+};
+
 //################################################# SYSTEM #################################################################################
 
 //The main class of the library. It is used to define a system of SDEs and to produce trajectories of that.
@@ -297,6 +330,15 @@ public:
     //This core function simulate a single trajectory given the initial conditions, the time period and the standard step.
     //This function will return an element of Traj class.
     Traj simulateTrajectory(const vector<float> &x0,const float period,const float h_0);
+
+    //This core function acts as simulateTrajectory, however the internal points of the trajectory are not saved and only
+    //the last value of the trajectory is returned as a vector of shape (time,[coords]).
+    vector<float> simulateTrajectoryLastPoint(const vector<float> &x0,const float period,const float h_0);
+
+    //This core function acts as simulateTrajectory but it will not return the entire trajectory. In fact, this function
+    //asks for a set of time instants and the output will be the values of the trajectory in those instants (actually the
+    //immediately before point).
+    SetOfPoints simulateTrajectorySOP(const vector<float> &x0,const float period,const float h_0,const vector<float> &instants);
 
     //This function will automatically produce a group of the trajectories to obtain the value in a time instant. 
     //It requires, in order,:

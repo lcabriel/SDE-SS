@@ -234,14 +234,14 @@ void DataLinker::resetTimeOptimizationCounter(){
 //########################################################### TRAJECTORY #############################################################################
 //##############################################################################################################################################################
 
-//CONSTRUCTOR: the time vector and the 2D array of variable values.
-Traj::Traj(vector<float> t,vector<vector<float>> v): times(t), vars(v){
-    //Check that the two arguments are of the same length.
-    if(t.size()!=v.size()) error("Traj: Constructor: Runtime error: Times vector has different number of steps than the variable 2D vector");
-
-    step_num = t.size();
+//CONSTRUCTOR: the time vector and the 2D array of variable values using "std::move".
+Traj::Traj(vector<float>&& t, vector<vector<float>>&& v): times(move(t)), vars(move(v)) {
+    if(times.size() != vars.size())
+        error("Traj: Constructor: Runtime error: Times vector has different number of steps than the variables 2D vector");
+    step_num = times.size();
 }
 
+//CONSTRUCTOR 2: passing another Traj instance.
 Traj::Traj(const Traj& t): times(t.getTimes()),vars(t.getVars()),step_num(t.getLength()){}
 
 //Given a certain time index, this function will return the situation as a vector of times+vars 
@@ -269,6 +269,19 @@ TimePicture::TimePicture(vector<vector<float>> values,float t): points(values),T
 
 //CONSTURCTOR 2: build copying another TimePicture instance.
 TimePicture::TimePicture(const TimePicture& TP): points(TP.getAllPoints()),T(TP.getTimeInstant()),N(TP.getNumSim()){}
+
+//##############################################################################################################################################################
+//########################################################### SET OF POINTS #############################################################################
+//##############################################################################################################################################################
+
+//CONSTRUCTOR 1: the time instants vector and the 2D array of variable values using std::move.
+SetOfPoints::SetOfPoints(vector<float>&& t,vector<vector<float>>&& v): times(move(t)), vars(move(v)) {
+    if(times.size() != vars.size())
+        error("SetOfPoints: Constructor: Runtime error: Times vector has different number of instants than the variables 2D vector");
+}
+
+//CONSTRUCTOR 2: passing another SetOfPoints instance.
+SetOfPoints::SetOfPoints(const SetOfPoints& sop): times(sop.getTimes()),vars(sop.getVars()){}
 
 //##############################################################################################################################################################
 //######################################################### SYSTEM #############################################################################################
@@ -371,7 +384,107 @@ Traj SDE_SS_System::simulateTrajectory(const vector<float> &x0,const float perio
     }while((times.back()+h)<=period);
 
     //Return the Traj object
-    return Traj(times,values);
+    return Traj(move(times),move(values));
+}
+
+//This core function acts as simulateTrajectory, however the internal points of the trajectory are not saved and only
+//the last value of the trajectory is returned as a vector of shape (time,[coords]).
+vector<float> SDE_SS_System::simulateTrajectoryLastPoint(const vector<float> &x0,const float period,const float h_0){
+    checkTrajInput(x0,period,h_0);
+
+    //Setup the initial point of the trajectory
+    vector<float> old_point=x0;
+    float time{0.0};
+
+    float h{h_0}; //The h used step-by-step. Can change to adapt to the boundary
+
+    vector<vector<float>> ks(4,vector<float>(size,0.0)); //k vector used by the RK4 method to avoid reallocation
+
+    do{
+
+        vector<float> new_point{evolveTraj(old_point,h,time,ks)}; //define the new point
+
+        //if out of bound
+        if(bounded){
+            while(!bounds(new_point)){
+                h = h/10.0;
+                new_point = evolveTraj(old_point,h,time,ks);
+            }
+        }
+
+        //Substitute the old point
+        old_point = new_point;
+        time += h;
+
+        //Reset the step
+        h = h_0;
+
+    }while((time+h)<=period);
+
+    old_point.insert(old_point.begin(),time);
+
+    return(old_point);
+}
+
+//This core function acts as simulateTrajectory but it will not return the entire trajectory. In fact, this function
+//asks for a set of time instants and the output will be the values of the trajectory in those instants (actually the
+//immediately before point).
+SetOfPoints SDE_SS_System::simulateTrajectorySOP(const vector<float> &x0,const float period,const float h_0,const vector<float> &instants){
+    checkTrajInput(x0,period,h_0);
+
+    //Setup the initial point of the trajectory
+    vector<float> old_point = x0;
+    float time{0.0};
+
+    vector<vector<float>> values;
+    vector<float> times;
+
+    values.reserve(instants.size());
+    times.reserve(instants.size());
+
+    //Setup all the other useful variables
+
+    vector<float> sort_inst = instants;
+    sort(sort_inst.begin(),sort_inst.end()); //Sort the instants to improve performances
+
+    float h{h_0}; //The h used step-by-step. Can change to adapt to the boundary
+    unsigned int counter{0}; //Used to keep track of the last found point (to avoid striving at every iteration)
+
+    vector<vector<float>> ks(4,vector<float>(size,0.0)); //k vector used by the RK4 method to avoid reallocation
+
+    do{
+
+        vector<float> new_point{evolveTraj(old_point,h,time,ks)}; //define the new point
+
+        //if out of bound
+        if(bounded){
+            while(!bounds(new_point)){
+                h = h/10.0;
+                new_point = evolveTraj(old_point,h,time,ks);
+            }
+        }
+
+        //Update time first
+        time += h;
+
+        //Check if it is in the set the previous point
+        if(counter < instants.size()){
+            if(time >= sort_inst[counter]){
+                counter++;
+                values.push_back(old_point);
+                times.push_back(time-h);
+            }
+        }
+
+        //Substitute the old point
+        old_point = new_point;
+
+        //Reset the step
+        h = h_0;
+
+    }while((time+h)<=period);
+
+    return SetOfPoints(move(times),move(values));
 }
 
 //This function will automatically produce a group of the trajectories to obtain the value in a time instant. 

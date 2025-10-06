@@ -69,6 +69,12 @@ the columns the variables of the SDEs system. There are also saved the time inst
 - *vector&lt;float&gt;& getPoint(size_t p)*: given a specific simulation by index with p, this function return the values of that simulation at the time instant of
 	the time picture.
 
+## Set of Points ("SetOfPoints"):
+
+This class is used to optimize memory usage when you are not interested in all the intermediate points of a trajectory. This is very very similar in its
+structure to a Traj elements but it is made to contain only a set of points of a trajectory. The structure of the two classes are very similar with the
+only exception of not having the *getLenght* amd *getInstant* functions. (MAYBE IN THE FUTURE WILL BE UNIFIED AS CHILD OF A COMMON CLASS...)
+
 ## Data Linker ("DataLinker"):
 
 This small generic class is implemented when your fields presents some parameters or elements which are not fixed in time and are based on the values of a trajectory
@@ -107,6 +113,15 @@ aspect of your system.
 	using an evolution method based on a Strang splitting treating the deterministic part with a RK4 method and the deterministic part depending on the *NoiseClass*
 	*compute_noise* method of implementation (e.g. Euler-Maruyama for *WienerEuler*). The trajectory will be produced as a Traj object (see above).
 	It requires as input a vector representing the initial condition, the length of the simulation and the base time step of the trajectory.
+- *vector&lt;float&gt; simulateTrajectoryLastPoint(const vector&lt;float&gt; &x0,const float period,const float h_0)*: this function will act as simulate trajectory
+	but it will not keep all the intermediate point. Under the runtime POV, this function uses lesser memory not saving the intermediate results. The output will
+	not be a *Traj* element but only the last point of the trajectory expressed as (time,[variables]).
+- *SetOfPoints simulateTrajectorySOP(const vector&lt;float&gt; &x0,const float period,const float h_0,const vector&lt;float&gt; &instants)*: a sort of in-between
+	of the previous twos, this function will not keep all the intermediate values of the trajectories but only the ones indicated by the *instants* input. Actually
+	it is difficult and consuming to obtain the exact values so the points immediately before is taken.
+
+A little more articulate is the function to produce TimePictures
+
 - *TimePicture produceTimePicture(\[TOO MANY\])*: this complex function produced a so-called Time Picture. A Time Picture is, given a set of trajectories, 
 	the set of the values of the trajectories in a given time instant. This function requires a lot of arguments but produces its own trajectories internally. Therefore it needs:
 

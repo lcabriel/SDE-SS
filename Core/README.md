@@ -10,7 +10,7 @@ This class is used to represent the noise aspect of the fields. This class is me
 *WienerMilstein* (see below) are child of this one. Feel free to implement your own *NoiseClass*-es: to do this the only function you need to
 override is
 
-- *vector&lt;float&gt; compute_noise(const vector&lt;float&gt; &x_i,float\* h))*: this class is used by the field to compute the noise. Here you need to
+- *valarray&lt;float&gt; compute_noise(const valarray&lt;float&gt; &x_i,float\* h))*: this class is used by the field to compute the noise. Here you need to
 	put the actual "form" of your noise. As example you can look to *WienerMilstein*. The class can accept the point *x_i* if your noise is
 	based on the coordinates or if you are reserving a variable to keep track of the noise (e.g. Ornstein-Uhlenbeck). It will require also
 	the step length of your simulation's step.
@@ -21,17 +21,16 @@ This child of *NoiseClass* implements the gaussian white noise or Wiener process
 of the noise with a constant is leaved for the *g_function* thus this class do not require any parameter upon construction. The random engine
 is a mt19937 with a seed based on the instantiation time and the pointer of the entity.
 
-- *vector&lt;float&gt; compute_noise(const vector&lt;float&gt; &x_i,float\* h))*: the virtual function is override in this version and the function will
+- *valarray&lt;float&gt; compute_noise(const valarray&lt;float&gt; &x_i,float\* h))*: the virtual function is override in this version and the function will
 	return a vector with the size equal to the dimensionality of the system with, in every slot, a *dW* computed separately in case you have
 	multiple SDEs or you required multiple increments for some reasons.
 
 ## Wiener noise with Milstein ("WienerMilsten"):
 
 Conceptually similar than before this class do the same thing as the *WienerEuler* but using the Milstein method. Due to this, it requires as
-an argument a function which should be the derivative of your *g_function* that you use in the field. The other features are the same as
-Wiener-Euler.
+an argument a function which should be the derivative of your *g_function* that you use in the field. The *g_function* should be expressed as a *const valarray&lt;float&gt; -&gt; valarray&lt;float&gt;* function. The other features are the same as Wiener-Euler.
 
-- *vector&lt;float&gt; compute_noise(const vector&lt;float&gt; &x_i,float\* h))*: as before, the function will return a vector of increments but computed
+- *valarray&lt;float&gt; compute_noise(const valarray&lt;float&gt; &x_i,float\* h))*: as before, the function will return a vector of increments but computed
 	using the Milstein method instead of the Euler-Maruyama.
 
 ## Generic FieldClass ("FieldClass"):
@@ -42,12 +41,12 @@ set then the noise you have to insert in your constructor the *setNoise* protect
 Upon implementation you only need to modify the virtual functions *f_function_impl* and *g_function_impl*, while the other functions are only used 
 by the other classes of the library. To see how to override these two, please look to *test_code.cpp* in the main directory.
 
-- *void f_function_impl(const vector&lt;float&gt; &x,float t,vector&lt;float&gt; &y) const*: to personalize your system you need to override this virtual function
+- *void f_function_impl(const valarray&lt;float&gt; &x,float t,valarray&lt;float&gt; &y) const*: to personalize your system you need to override this virtual function
 	inside your field. *f_function* is used to express the deterministic function of the Ito's formula ($dx = f(x)dt+g(x)dW$). To understand how to override correctly, please look at the test code. However, this function will require a system's point and will return the f(x) evaluation vector of the same size 
 	of the system.
-- *void g_function_impl(const vector&lt;float&gt; &x,float t,vector&lt;float&gt; &y) const*: Same as the function above. You need to override it to describe the 
+- *void g_function_impl(const valarray&lt;float&gt; &x,float t,valarray&lt;float&gt; &y) const*: Same as the function above. You need to override it to describe the 
 	*g(x)* part of Ito's formula.
-- *vector&lt;float&gt; getNoise(const vector&lt;float&gt; &x_i,float\* h)*: Upon call, this function will call the *compute_noise* function of the *NoiseClass*
+- *valarray&lt;float&gt; getNoise(const valarray&lt;float&gt; &x_i,float\* h)*: Upon call, this function will call the *compute_noise* function of the *NoiseClass*
 	of your field that you should have set at construction.
 
 ## Trajectory ("Traj"):
@@ -73,7 +72,7 @@ the columns the variables of the SDEs system. There are also saved the time inst
 
 This class is used to optimize memory usage when you are not interested in all the intermediate points of a trajectory. This is very very similar in its
 structure to a Traj elements but it is made to contain only a set of points of a trajectory. The structure of the two classes are very similar with the
-only exception of not having the *getLenght* amd *getInstant* functions. (MAYBE IN THE FUTURE WILL BE UNIFIED AS CHILD OF A COMMON CLASS...)
+only exception of not having the *getLenght* function. (MAYBE IN THE FUTURE WILL BE UNIFIED AS CHILD OF A COMMON CLASS...)
 
 ## Data Linker ("DataLinker"):
 
@@ -81,7 +80,7 @@ This small generic class is implemented when your fields presents some parameter
 *Traj* as the one produced by the *SDE_SS_System::simulateTrajectory*. This class (as *FieldClass*) has to be personalize via child
 class giving a definition to the virtual function *getData* which will be use to retrive the data from the array when computing the field. This class has already implemented a constructor that accept a *Traj* instance or a time vector and a 2D values with in each row a time instant and the along the columns the values of the variable (in this case a same dimension check on the two arguments is performed) but you can expand these on your children classes. A DataLinker entity should be theoretically used inside your own custom FieldClass, however for more information about the implementation please look to the *test_code_data.cpp*. Both the array (called *data*) and the TimeOptimizationCounter (called *TOC*; see below) can be accessed by child classes.
 
-- *float getData(const float t,const vector&lt;float&gt;& x)*: this virtual function, when defined in the child class, should gather one of the variables of the
+- *float getData(const float t,const valarray&lt;float&gt;& x)*: this virtual function, when defined in the child class, should gather one of the variables of the
 	trajectory to the nearest previous time instant defined by *t*. Therefore, this function should be override by the child classes as shown in *test_code_data.cpp* having the possibility to access directly to the data array *data*. If necessary, you can create multiple copies of this function in your child if you need to access different data in different points. Obviously the array of data is expressed as a *Traj* trajectory, thus *t* has to be converted in an index to access on *Traj* arrays, calling in the child-defined *getData* the protected function *findTimeIndex*. The vector *x* is needed in case of an Adaptive DataLinker in which the data set expressed by the *Traj* can change accordingly to the system state *x*.
 - *void setNewData(const Traj& t)*: this is the function to change properly the data set in case of an adaptive_set. The declaration if the DataLinker is adaptive or
 	not is made upon construction specifying as second argument (as a boolean) if the DataLinker is adaptive or not. The *setNewData* function will check this upon call.
@@ -115,7 +114,7 @@ aspect of your system.
 	It requires as input a vector representing the initial condition, the length of the simulation and the base time step of the trajectory.
 - *vector&lt;float&gt; simulateTrajectoryLastPoint(const vector&lt;float&gt; &x0,const float period,const float h_0)*: this function will act as simulate trajectory
 	but it will not keep all the intermediate point. Under the runtime POV, this function uses lesser memory not saving the intermediate results. The output will
-	not be a *Traj* element but only the last point of the trajectory expressed as (time,[variables]).
+	not be a *Traj* element but only the last point of the trajectory expressed as (time,\[variables\]).
 - *SetOfPoints simulateTrajectorySOP(const vector&lt;float&gt; &x0,const float period,const float h_0,const vector&lt;float&gt; &instants)*: a sort of in-between
 	of the previous twos, this function will not keep all the intermediate values of the trajectories but only the ones indicated by the *instants* input. Actually
 	it is difficult and consuming to obtain the exact values so the points immediately before is taken.
@@ -141,10 +140,9 @@ A little more articulate is the function to produce TimePictures
 These small functions are actually quite important and are implemented to set some important features of the system, such as the bounds of the process (if bounded)
 and the number of threads used in the parallel operations.
 
-- *void setBoundFunction(function&lt;bool(const vector&lt;float&gt;&)&gt; f)*: if, during the construction procedure of a *SDE_SS_System* instance, the system is
+- *void setBoundFunction(function&lt;bool(const valarray&lt;float&gt;&)&gt; f)*: if, during the construction procedure of a *SDE_SS_System* instance, the system is
 	characterized as "bounded", you have also to set the bound function manually using this function. This function is used to check if the system is
-	within the limit at every new time step (if it is not, the evolution is tried again with a smaller step). Considering this, it should be a *vector&lt;float&gt; -&gt; bool*
-	function.
+	within the limit at every new time step (if it is not, the evolution is tried again with a smaller step). Considering this, it should be a *valarray&lt;float&gt; -&gt; bool* function.
 - *void setNumThreads(unsigned int N)*: all the Tool functions (see below) are parallelized on a certain degree. The number of threads used for the parallelisation
 	is set equal to **8** by default. However, it is possible to change the number of threads used by these heavy functions with this public utility function.
 - *static size_t findTimeIndex(const vector&lt;float&gt; &times,float TI)*: this static function is actually made to be used by certain Tool functions however it does

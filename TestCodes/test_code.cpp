@@ -46,7 +46,7 @@ public:
 
     //The f_function definition: we are going to say as each variable of the system
     //should be update. This design is similar to the system of equations' shape.
-    void f_function_impl(const vector<float> &x,float t,vector<float> &y) const override{
+    void f_function_impl(const valarray<float> &x,float t,valarray<float> &y) const override{
 
         y[0] = x[0]*(1-x[0])*(x_e - x[1]);
         y[1] = (x[2]-x[1])/tau2;
@@ -54,7 +54,7 @@ public:
     }
 
     //The same can be said for the g_function.
-    void g_function_impl(const vector<float> &x,float t,vector<float> &y) const override{
+    void g_function_impl(const valarray<float> &x,float t,valarray<float> &y) const override{
 
         y[0] = -x[0]*(1-x[0])*D;
         y[1] = 0;
@@ -66,7 +66,7 @@ public:
 
 //The system described by the equations above it is also a bounded one in [0,1]. To this we need to define a bound function to pass to
 //our system. The bound function expression is standard: it returns a boolean and requires a vector<float> as argument.
-bool boundaries(vector<float> x){
+bool boundaries(valarray<float> x){
     return ((x[0]>=0)&&(x[0]<=1));
 }
 
@@ -105,6 +105,8 @@ int main(){
 
     //Computing the PDF is heavy so we increase the number of threads used by heavy operations from 8 to 10
     system.setNumThreads(10);
+
+    Traj T = system.simulateTrajectory({0.5,0.0,0.0},2000,0.01);
 
     /*We want our PDF in the instant equal to the last step thus we need to create first a TimePicture of the system.
     The points in the TimePicture are stored in a 2D array with along the row the trajectories and along the columns

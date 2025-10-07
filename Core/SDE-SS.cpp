@@ -51,7 +51,7 @@ vector<float> operator*(const vector<float>& a,const vector<float>& b) {
 //##############################################################################################################################################################
 
 //A standard compute noise that simply gives back the passed point in the system space.
-vector<float> NoiseClass::compute_noise(const vector<float>& x_i,const float* h){
+valarray<float> NoiseClass::compute_noise(const valarray<float>& x_i,const float* h){
     return x_i;
 }
 
@@ -69,8 +69,8 @@ WienerEuler::WienerEuler():
 
 //Compute a dW kind of step for the Wiener process using the Euler-Maruyama method. 
 //Actually a vector of the same size of the system is returned and, in each slot, there is a different dW. 
-vector<float> WienerEuler::compute_noise(const vector<float>& x_i,const float* h){
-    vector<float> noise_out(x_i.size(),0.0);
+valarray<float> WienerEuler::compute_noise(const valarray<float>& x_i,const float* h){
+    valarray<float> noise_out(0.0,x_i.size());
 
     for(size_t i=0;i<x_i.size();i++){ //dW -> N(0,1)*sqrt(h)
         noise_out[i] = distribution(eng)*sqrt(*h);
@@ -87,7 +87,7 @@ vector<float> WienerEuler::compute_noise(const vector<float>& x_i,const float* h
 //CONSTRUCTOR: initializes the distribution and random generator.
 //Moreover, requires as argument the derivative of the g_function used in the field class.
 //The seed of the random engine is created starting from the time and the point of the instance.
-WienerMilstein::WienerMilstein(const function<vector<float>(const vector<float>&)>& derivative):
+WienerMilstein::WienerMilstein(const function<valarray<float>(const valarray<float>&)>& derivative):
     eng(static_cast<unsigned long>(time(0) * reinterpret_cast<uintptr_t>(this))),
     distribution(0.0, 1.0)
 {
@@ -99,10 +99,10 @@ WienerMilstein::WienerMilstein(const function<vector<float>(const vector<float>&
 
 //Compute a dW kind-of step for the Wiener process using the Milstein method. 
 //Actually a vector of the same size of the system is returned and, at each step there is a different dW. 
-vector<float> WienerMilstein::compute_noise(const vector<float> &x_i,const float* h){
-    vector<float> noise_out(x_i.size(),0.0);
+valarray<float> WienerMilstein::compute_noise(const valarray<float> &x_i,const float* h){
+    valarray<float> noise_out(0.0,x_i.size());
 
-    vector<float> dg_eval = D_g(x_i);
+    valarray<float> dg_eval = D_g(x_i);
     for(size_t i=0;i<x_i.size();i++){
         const float dW = distribution(eng)*sqrt(*h);
 
@@ -128,7 +128,7 @@ void FieldClass::setNoise(NoiseClass* const N){
 
 //Function for the deterministic part of the field. To define, please
 //override "f_function_impl" as in documentation.
-void FieldClass::f_function(const vector<float> &x,float t,vector<float> &y){
+void FieldClass::f_function(const valarray<float> &x,float t,valarray<float> &y){
 
     if(!noise_initialized) error("FieldClass: f_function: Runtime error: Noise in the FieldClass not initialized.");
 
@@ -137,7 +137,7 @@ void FieldClass::f_function(const vector<float> &x,float t,vector<float> &y){
 
 //Function for the stochastic part of the field. To define, please
 //override "g_function_impl" as in documentation.
-void FieldClass::g_function(const vector<float> &x,float t,vector<float> &y){
+void FieldClass::g_function(const valarray<float> &x,float t,valarray<float> &y){
 
     if(!noise_initialized) error("FieldClass: g_function: Runtime error: Noise in a FieldClass not initialized.");
 
@@ -146,14 +146,14 @@ void FieldClass::g_function(const vector<float> &x,float t,vector<float> &y){
 
 //Implementation function for the deterministic part of the field. Override this as in
 //documentation to implement your system.
-void FieldClass::f_function_impl(const vector<float> &x,float t,vector<float> &y) const{}
+void FieldClass::f_function_impl(const valarray<float> &x,float t,valarray<float> &y) const{}
 
 //Implementation function for the stochastic part of the field. Override this as in
 //documentation to implement your system.
-void FieldClass::g_function_impl(const vector<float> &x,float t,vector<float> &y) const{}
+void FieldClass::g_function_impl(const valarray<float> &x,float t,valarray<float> &y) const{}
 
 //This function will give the result of the compute_noise of the local NoiseClass.
-vector<float> FieldClass::getNoise(const vector<float> &x_i,const float* h){
+valarray<float> FieldClass::getNoise(const valarray<float> &x_i,const float* h){
     
     if(!noise_initialized) error("FieldClass: getNoise: Runtime error: Noise in a FieldClass not initialized");
 
@@ -211,7 +211,7 @@ float DataLinker::interpolData(const float& t,const unsigned int& var){
 }
 
 //Given a certain time instant the getData returns a child-defined float value near to the given time.
-float DataLinker::getData(const float t,const vector<float>& x){    
+float DataLinker::getData(const float t,const valarray<float>& x){    
     return 0.0;
 }
 
@@ -283,6 +283,19 @@ SetOfPoints::SetOfPoints(vector<float>&& t,vector<vector<float>>&& v): times(mov
 //CONSTRUCTOR 2: passing another SetOfPoints instance.
 SetOfPoints::SetOfPoints(const SetOfPoints& sop): times(sop.getTimes()),vars(sop.getVars()){}
 
+//Given a certain index, this function will return the situation as a vector of times+vars 
+vector<float> SetOfPoints::getInstant(const size_t index) const{
+    vector<float> output(vars[0].size()+1,0.0);
+
+    output[0] = times[index];
+
+    for(unsigned int i=0;i<vars[0].size();i++){
+        output[i+1] = vars[index][i];
+    }
+
+    return output;
+}
+
 //##############################################################################################################################################################
 //######################################################### SYSTEM #############################################################################################
 //##############################################################################################################################################################
@@ -296,6 +309,7 @@ SDE_SS_System::SDE_SS_System(unsigned int N,FieldClass* F,bool isBounded):
     //Check if the size of the problem is meaningful
     if(F == nullptr) error("SDE_SS_System: Constructor: Runtime error: Passed FieldClass is invalid (nullptr).");
     if(N<1) error("SDE_SS_System: Constructor: Runtime error: Given size is <1. It has no sense.");
+
 }
 
 //################### EVOLUTION FUNCTIONS ####################
@@ -304,20 +318,21 @@ SDE_SS_System::SDE_SS_System(unsigned int N,FieldClass* F,bool isBounded):
 //Given the previous point and the step length, this internal function is the core function to evolve 
 //the last step in the new one of the trajectory. It will use the RK4 method.
 //The idea is to use a setup in the Strang splitting way synergizing with RK4 and the noise method.
-vector<float> SDE_SS_System::evolveTraj(const vector<float> &x_n,float h,float t,vector<vector<float>> &k){
+valarray<float> SDE_SS_System::evolveTraj(const valarray<float> &x_n,float h,float t,vector<valarray<float>> &k,
+    valarray<float> &x1,valarray<float> &g,valarray<float> &n,valarray<float> &x_temp){
 
     //1. We simulate the deterministic part of the field with RK4 for half step
     //Now we compute X^1 (the first intermediate step)
-    vector<float> x1{x_n+RK4_method(x_n,h/2,t,k)*(h/2.0f)};
+    x1 = x_n+RK4_method(x_n,h/2,t,k,x_temp)*(h/2.0f);
 
     //2. Add the stochastic part
-    vector<float> g(size,0.0);
     field->g_function(x1,t,g);
+    n = field->getNoise(x1,&h);
 
-    x1 = x1+g*(field->getNoise(x1,&h)); //Compute the noisy part; is multiplied than for g_function
-
+    x1 = x1+g*n; //Compute the noisy part; is multiplied than for g_function
+    
     //3. Evolve the last half step with RK4 for half step
-    x1 = x1+RK4_method(x1,h/2,t,k)*(h/2.0f);
+    x1 = x1+RK4_method(x1,h/2,t,k,x_temp)*(h/2.0f);
 
     return x1;
 }
@@ -325,20 +340,21 @@ vector<float> SDE_SS_System::evolveTraj(const vector<float> &x_n,float h,float t
 //Given the starting point and the step, this function will return the RK4 update
 //of the deterministic part of the field.
 //REMEMBER: you have to multiply externally by h or your step eventually.
-vector<float> SDE_SS_System::RK4_method(const vector<float> &x0,float h,float t,vector<vector<float>> &k){
+valarray<float> SDE_SS_System::RK4_method(const valarray<float> &x0,float h,float t,vector<valarray<float>> &k,
+    valarray<float> &x_temp){
 
-    vector<float> new_x{x0};
+    x_temp=x0;
 
-    field->f_function(new_x,t,k[0]); //compute k1
-    new_x = x0+(h/2.0f)*k[0];
+    field->f_function(x_temp,t,k[0]); //compute k1
+    x_temp = x0+(h/2.0f)*k[0];
 
-    field->f_function(new_x,t,k[1]); //compute k2
-    new_x = x0+(h/2.0f)*k[1];
+    field->f_function(x_temp,t,k[1]); //compute k2
+    x_temp = x0+(h/2.0f)*k[1];
 
-    field->f_function(new_x,t,k[2]); //compute k3
-    new_x = x0+h*k[2];
+    field->f_function(x_temp,t,k[2]); //compute k3
+    x_temp = x0+h*k[2];
 
-    field->f_function(new_x,t,k[3]); //compute k4
+    field->f_function(x_temp,t,k[3]); //compute k4
 
     return (k[0]+2.0f*k[1]+2.0f*k[2]+k[3])*(1.0f/6.0f);
 }
@@ -355,27 +371,40 @@ Traj SDE_SS_System::simulateTrajectory(const vector<float> &x0,const float perio
     vector<vector<float>> values;
     vector<float> times;
 
+    //Estimation of the size (for memory opt)
+    values.reserve(period*1.1/h_0);
+    times.reserve(period*1.1/h_0);
+
     values.push_back(x0);
     times.push_back(0.0);
 
     float h{h_0}; //The h used step-by-step. Can change to adapt to the boundary
 
-    vector<vector<float>> ks(4,vector<float>(size,0.0)); //k vector used by the RK4 method to avoid reallocation
+    //k vector used by the RK4 method to avoid reallocation
+    vector<valarray<float>> ks(4,valarray<float>(0.0,size));
+
+    valarray<float> x1,g,n,x_temp; //Used for pooling in evolveTraj and RK4_method
+
+    x1 = valarray<float>(0.0,size);
+    g = valarray<float>(0.0,size);
+    n = valarray<float>(0.0,size);
+    x_temp = valarray<float>(0.0,size);
 
     do{
+        valarray<float> current_point(values.back().data(),size);
 
-        vector<float> new_point{evolveTraj(values.back(),h,times.back(),ks)}; //define the new point
+        valarray<float> new_point{evolveTraj(current_point,h,times.back(),ks,x1,g,n,x_temp)}; //define the new point
 
         //if out of bound
         if(bounded){
             while(!bounds(new_point)){
                 h = h/10.0;
-                new_point = evolveTraj(values.back(),h,times.back(),ks);
+                new_point = evolveTraj(current_point,h,times.back(),ks,x1,g,n,x_temp);
             }
         }
 
         //Add the new point
-        values.emplace_back(new_point);
+        values.emplace_back(vector<float>(begin(new_point),end(new_point)));
         times.emplace_back(times.back()+h);
 
         //Reset the step
@@ -393,22 +422,29 @@ vector<float> SDE_SS_System::simulateTrajectoryLastPoint(const vector<float> &x0
     checkTrajInput(x0,period,h_0);
 
     //Setup the initial point of the trajectory
-    vector<float> old_point=x0;
+    valarray<float> old_point = valarray<float>(x0.data(),size);
     float time{0.0};
 
     float h{h_0}; //The h used step-by-step. Can change to adapt to the boundary
 
-    vector<vector<float>> ks(4,vector<float>(size,0.0)); //k vector used by the RK4 method to avoid reallocation
+    vector<valarray<float>> ks(4,valarray<float>(0.0,size)); //k vector used by the RK4 method to avoid reallocation
+
+    valarray<float> x1,g,n,x_temp; //Used for pooling in evolveTraj and RK4_method
+
+    x1 = valarray<float>(0.0,size);
+    g = valarray<float>(0.0,size);
+    n = valarray<float>(0.0,size);
+    x_temp = valarray<float>(0.0,size);
 
     do{
 
-        vector<float> new_point{evolveTraj(old_point,h,time,ks)}; //define the new point
+        valarray<float> new_point{evolveTraj(old_point,h,time,ks,x1,g,n,x_temp)}; //define the new point
 
         //if out of bound
         if(bounded){
             while(!bounds(new_point)){
                 h = h/10.0;
-                new_point = evolveTraj(old_point,h,time,ks);
+                new_point = evolveTraj(old_point,h,time,ks,x1,g,n,x_temp);
             }
         }
 
@@ -421,9 +457,10 @@ vector<float> SDE_SS_System::simulateTrajectoryLastPoint(const vector<float> &x0
 
     }while((time+h)<=period);
 
-    old_point.insert(old_point.begin(),time);
+    vector<float> point = vector<float>(begin(old_point),end(old_point));
+    point.insert(point.begin(),time);
 
-    return(old_point);
+    return(point);
 }
 
 //This core function acts as simulateTrajectory but it will not return the entire trajectory. In fact, this function
@@ -433,7 +470,7 @@ SetOfPoints SDE_SS_System::simulateTrajectorySOP(const vector<float> &x0,const f
     checkTrajInput(x0,period,h_0);
 
     //Setup the initial point of the trajectory
-    vector<float> old_point = x0;
+    valarray<float> old_point = valarray<float>(x0.data(),size);
     float time{0.0};
 
     vector<vector<float>> values;
@@ -450,17 +487,23 @@ SetOfPoints SDE_SS_System::simulateTrajectorySOP(const vector<float> &x0,const f
     float h{h_0}; //The h used step-by-step. Can change to adapt to the boundary
     unsigned int counter{0}; //Used to keep track of the last found point (to avoid striving at every iteration)
 
-    vector<vector<float>> ks(4,vector<float>(size,0.0)); //k vector used by the RK4 method to avoid reallocation
+    vector<valarray<float>> ks(4,valarray<float>(0.0,size)); //k vector used by the RK4 method to avoid reallocation
+    valarray<float> x1,g,n,x_temp; //Used for pooling in evolveTraj and RK4_method
+
+    x1 = valarray<float>(0.0,size);
+    g = valarray<float>(0.0,size);
+    n = valarray<float>(0.0,size);
+    x_temp = valarray<float>(0.0,size);
 
     do{
 
-        vector<float> new_point{evolveTraj(old_point,h,time,ks)}; //define the new point
+        valarray<float> new_point{evolveTraj(old_point,h,time,ks,x1,g,n,x_temp)}; //define the new point
 
         //if out of bound
         if(bounded){
             while(!bounds(new_point)){
                 h = h/10.0;
-                new_point = evolveTraj(old_point,h,time,ks);
+                new_point = evolveTraj(old_point,h,time,ks,x1,g,n,x_temp);
             }
         }
 
@@ -471,7 +514,7 @@ SetOfPoints SDE_SS_System::simulateTrajectorySOP(const vector<float> &x0,const f
         if(counter < instants.size()){
             if(time >= sort_inst[counter]){
                 counter++;
-                values.push_back(old_point);
+                values.push_back(vector<float>(begin(old_point),end(old_point)));
                 times.push_back(time-h);
             }
         }
@@ -544,20 +587,16 @@ TimePicture SDE_SS_System::produceTimePicture(const float period,const float h_0
                 init = x0[cumulative_quota[ID]+i];
             }
 
-            //2.3.2: Compute the trajectory
-            Traj traj{simulateTrajectory(init,period,h_0)};
-
-            //2.3.3: Find the time index associated to the time instant and extract
-            size_t time_index;
-            if(time_instant<=0){ //last point
-                time_index = traj.getLength()-1;
+            //2.3.2: if it is the last use simulateTrajectoryLastPoint other wise [...]SOP with a single time instant vector
+            if(time_instant<=0){//last point
+                local_points[i] = simulateTrajectoryLastPoint(init,period,h_0);
+                local_time_instants[i] = local_points.back()[0];
             }
-            else{ //If is not the last we do it externally with two functions
-                time_index = findTimeIndex(traj.getTimes(),time_instant);
+            else{ //internal -> using set of points
+                SetOfPoints temp_set{simulateTrajectorySOP(init,period,h_0,{time_instant})};
+                local_points[i] = temp_set.getInstant(0);
+                local_time_instants[i] = local_points.back()[0];
             }
-
-            local_points[i] = traj.getInstant(time_index);
-            local_time_instants[i] = (traj.getTimes()).back();
         }
 
         //Reunite all the values
@@ -592,8 +631,7 @@ TimePicture SDE_SS_System::produceTimePicture(const float period,const float h_0
 //and has as input a vector<float> (the point). The function should return "true" when
 //the point is in the domain.
 //The system has to be bounded (construction) to this function to work.
-void SDE_SS_System::setBoundFunction(const function<bool(const vector<float>&)>& f = nullptr){
-    
+void SDE_SS_System::setBoundFunction(const function<bool(const valarray<float>&)>& f = nullptr){
     //Check that the system is defined as bounded and the function defined
     if(!bounded) error("SDE_SS_System: setBoundFunction: Runtime error: SDE_SS_System is not bounded but setBoundFunction is called.");
     if(!f) error("SDE_SS_System: setBoundFunction: Runtime error: setBoundFunction argument is not valid.");

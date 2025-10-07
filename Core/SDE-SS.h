@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <omp.h>
 #include <algorithm>
+#include <valarray>
 
 using namespace std;
 
@@ -29,7 +30,7 @@ class NoiseClass{
 public:
     
     //A standard compute noise that simply gives back the passed point in the system space.
-    virtual vector<float> compute_noise(const vector<float> &x_i,const float* h);    
+    virtual valarray<float> compute_noise(const valarray<float> &x_i,const float* h);    
 
 };
 
@@ -49,7 +50,7 @@ public:
 
     //Compute a dW kind of step for the Wiener process using the Euler-Maruyama method. 
     //Actually a vector of the same size of the system is returned and, in each slot, there is a different dW. 
-    vector<float> compute_noise(const vector<float> &x_i, const float* h) override;
+    valarray<float> compute_noise(const valarray<float> &x_i, const float* h) override;
 
 };
 
@@ -60,18 +61,18 @@ class WienerMilstein: public NoiseClass{
 
     mt19937 eng; //Random number generator engine.
     normal_distribution<double> distribution; //Normal standard distribution.
-    function<vector<float>(vector<float>)> D_g; //The derivative of the field g_function.
+    function<valarray<float>(valarray<float>)> D_g; //The derivative of the field g_function.
 
 public:
 
     //CONSTRUCTOR: the distribution and the generator are initialize. 
     //Moreover, requires as argument the derivative of the g_function used in the field class.
     //The seed of the random engine is created starting from the time and the point of the instance.
-    WienerMilstein(const function<vector<float>(const vector<float>&)>& derivative = nullptr);
+    WienerMilstein(const function<valarray<float>(const valarray<float>&)>& derivative = nullptr);
 
     //Compute a dW kind-of step for the Wiener process using the Milstein method. 
     //Actually a vector of the same size of the system is returned and, at each step there is a different dW. 
-    vector<float> compute_noise(const vector<float> &x_i, const float* h) override;
+    valarray<float> compute_noise(const valarray<float> &x_i, const float* h) override;
 
 };
 
@@ -93,11 +94,11 @@ protected:
 
     //Function for the deterministic part of the field. To define, please
     //override "f_function_impl" as in documentation.
-    void f_function(const vector<float> &x,float t,vector<float> &y);
+    void f_function(const valarray<float> &x,float t,valarray<float> &y);
 
     //Function for the stochastic part of the field. To define, please
     //override "g_function_impl" as in documentation.
-    void g_function(const vector<float> &x,float t,vector<float> &y);
+    void g_function(const valarray<float> &x,float t,valarray<float> &y);
 
     friend class SDE_SS_System;
 
@@ -105,14 +106,14 @@ public:
 
     //Implementation function for the deterministic part of the field. Override this as in
     //documentation to implement your system.
-    virtual void f_function_impl(const vector<float> &x,float t,vector<float> &y) const;
+    virtual void f_function_impl(const valarray<float> &x,float t,valarray<float> &y) const;
 
     //Implementation function for the stochastic part of the field. Override this as in
     //documentation to implement your system.
-    virtual void g_function_impl(const vector<float> &x,float t,vector <float> &y) const;
+    virtual void g_function_impl(const valarray<float> &x,float t,valarray<float> &y) const;
 
     //This function will give the result of the compute_noise of the local NoiseClass.
-    vector<float> getNoise(const vector<float> &x_i,const float* h);
+    valarray<float> getNoise(const valarray<float> &x_i,const float* h);
 
 };
 
@@ -231,7 +232,7 @@ public:
     DataLinker(const DataLinker& DL);
 
     //Given a certain time instant (and sys vars for adapting sets), the getData returns a child-defined float value near to the given time.
-    virtual float getData(const float t,const vector<float>& x);
+    virtual float getData(const float t,const valarray<float>& x);
 
     //This function allow, if the DataLinker is adaptive, to pass a new set of data to the DataLinker.
     void setNewData(const Traj& t);
@@ -272,6 +273,9 @@ public:
         return vars;
     }
 
+    //Given a certain index, this function will return the situation as a vector of times+vars 
+    vector<float> getInstant(const size_t index) const;
+
 };
 
 //################################################# SYSTEM #################################################################################
@@ -283,7 +287,7 @@ class SDE_SS_System{
     unsigned int size; //Size of the system/problem.
     FieldClass* field; //Field of the system.
     bool bounded{false}; //Is the system bounded?
-    function<bool(vector<float>)> bounds; //the function used to express the bounds of the domain, if present.
+    function<bool(valarray<float>)> bounds; //the function used to express the bounds of the domain, if present.
     unsigned int NumThreads{8}; //The number of threads used for the parallelizable operations.
 
     //################### SUPPORT FUNCTIONS #######################
@@ -311,12 +315,14 @@ class SDE_SS_System{
     //Given the previous point and the step length, this internal function is the core function to evolve 
     //the last step in the new one of the trajectory. It will use the RK4 method.
     //The idea is to use a setup in the additive splitting way synergizing with RK4 and the noise method.
-    vector<float> evolveTraj(const vector<float> &x_n,float h,float t,vector<vector<float>> &k);
+    valarray<float> evolveTraj(const valarray<float> &x_n,float h,float t,vector<valarray<float>> &k,
+        valarray<float> &x1,valarray<float> &g,valarray<float> &n,valarray<float> &x_temp);
 
     //Given the starting point and the step, this function will return the RK4 update
     //of the deterministic part of the field.
     //REMEMBER: you have to multiply externally by h or your step eventually.
-    vector<float> RK4_method(const vector<float> &x0,float h,float t,vector<vector<float>> &k);
+    valarray<float> RK4_method(const valarray<float> &x0,float h,float t,vector<valarray<float>> &k,
+        valarray<float> &x_temp);
 
 public:
 
@@ -361,7 +367,7 @@ public:
     //and has as input a vector<float> (the point). The function should return "true" when
     //the point is in the domain.
     //The system has to be bounded (construction) to this function to work.
-    void setBoundFunction(const function<bool(const vector<float>&)>& f);
+    void setBoundFunction(const function<bool(const valarray<float>&)>& f);
 
     //This function is used to set the number of threads used by the heavy functions of the class.
     //The standard value is 8.

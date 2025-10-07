@@ -51,7 +51,7 @@ public:
 
     //The f_function definition: we are going to say as each variable of the system
     //should be update. This design is similar to the system of equations' shape.
-    void f_function_impl(const vector<float> &x,float t,vector<float> &y) const override{
+    void f_function_impl(const valarray<float> &x,float t,valarray<float> &y) const override{
 
         y[0] = x[0]*(1-x[0])*(x_e - x[1]);
         y[1] = (x[2]-x[1])/tau2;
@@ -59,7 +59,7 @@ public:
     }
 
     //The same can be said for the g_function.
-    void g_function_impl(const vector<float> &x,float t,vector<float> &y) const override{
+    void g_function_impl(const valarray<float> &x,float t,valarray<float> &y) const override{
 
         y[0] = -x[0]*(1-x[0])*D;
         y[1] = 0;
@@ -71,7 +71,7 @@ public:
 
 //The system described by the equations above it is also a bounded one in [0,1]. To this we need to define a bound function to pass to
 //our system. The bound function expression is standard: it returns a boolean and requires a vector<float> as argument.
-bool boundaries(vector<float> x){
+bool boundaries(valarray<float> x){
     return ((x[0]>=0)&&(x[0]<=1));
 }
 
@@ -86,12 +86,12 @@ public:
     myDataLinker(const Traj& traj,const bool AS): DataLinker(traj,AS){}
 
     //To get the first variable.
-    float getData(const float t,const vector<float>& x) override{
+    float getData(const float t,const valarray<float>& x) override{
         return data.getVars()[findTimeIndex(t)][0];
     }
 
     //To get the second variable.
-    float getData2(const float t,const vector<float>& x){
+    float getData2(const float t,const valarray<float>& x){
         return data.getVars()[TOC][1];
     }
 
@@ -114,13 +114,13 @@ public:
     }
 
     //The f_function definition: let's suppose that the field with data linker is only 2D because is a different system.
-    void f_function_impl(const vector<float> &x,float t,vector<float> &y) const override{
+    void f_function_impl(const valarray<float> &x,float t,valarray<float> &y) const override{
         y[0] = (linker->getData(t,x)-x[0])/tau;
         y[1] = (linker->getData2(t,x)-x[1])/tau;
     }
 
     //The same can be said for the g_function.
-    void g_function_impl(const vector<float> &x,float t,vector<float> &y) const override{
+    void g_function_impl(const valarray<float> &x,float t,valarray<float> &y) const override{
         y[0] = 0;
         y[1] = 0;
     }

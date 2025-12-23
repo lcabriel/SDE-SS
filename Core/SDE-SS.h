@@ -328,14 +328,14 @@ class SDE_SS_System{
     //Given the previous point and the step length, this internal function is the core function to evolve 
     //the last step in the new one of the trajectory. It will use the RK4 method.
     //The idea is to use a setup in the additive splitting way synergizing with RK4 and the noise method.
-    valarray<float> evolveTraj(const valarray<float> &x_n,float h,float t,vector<valarray<float>> &k,
-        valarray<float> &x1,valarray<float> &g,valarray<float> &n,valarray<float> &x_temp);
+    void evolveTraj(const valarray<float> &x_n,float h,float t,vector<valarray<float>> &k,
+        valarray<float> &x_next,valarray<float> &g,valarray<float> &n,valarray<float> &x_temp);
 
     //Given the starting point and the step, this function will return the RK4 update
     //of the deterministic part of the field.
     //REMEMBER: you have to multiply externally by h or your step eventually.
-    valarray<float> RK4_method(const valarray<float> &x0,float h,float t,vector<valarray<float>> &k,
-        valarray<float> &x_temp);
+    void RK4_method(const valarray<float> &x0,float h,float t,vector<valarray<float>> &k,
+        valarray<float> &update);
 
 public:
 

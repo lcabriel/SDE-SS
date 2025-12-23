@@ -317,57 +317,58 @@ SDE_SS_System::SDE_SS_System(unsigned int N,FieldClass* F,bool isBounded):
 //Given the previous point and the step length, this internal function is the core function to evolve 
 //the last step in the new one of the trajectory. It will use the RK4 method.
 //The idea is to use a setup in the Strang splitting way synergizing with RK4 and the noise method.
-valarray<float> SDE_SS_System::evolveTraj(const valarray<float> &x_n,float h,float t,vector<valarray<float>> &k,
-    valarray<float> &x1,valarray<float> &g,valarray<float> &n,valarray<float> &x_temp){
+void SDE_SS_System::evolveTraj(const valarray<float> &x_n,float h,float t,vector<valarray<float>> &k,
+    valarray<float> &x_next,valarray<float> &g,valarray<float> &n,valarray<float> &x_temp){
 
     //1. We simulate the deterministic part of the field with RK4 for half step
     //Now we compute X^1 (the first intermediate step)
-    x1 = x_n+RK4_method(x_n,h/2,t,k,x_temp)*(h/2.0f);
+    RK4_method(x_n,h/2,t,k,x_next);
+    x_next *= (h/2.0f);
+    x_next += x_n;
 
     //2. Add the stochastic part
-    field->g_function(x1,t,g);
-    n = field->getNoise(x1,&h);
+    field->g_function(x_next,t,g);
+    n = field->getNoise(x_next,&h);
 
-    x1 = x1+g*n; //Compute the noisy part; is multiplied than for g_function
+    g *= n;
+    x_next += g; //Compute the noisy part; is multiplied than for g_function
     
     //3. Evolve the last half step with RK4 for half step
-    x1 = x1+RK4_method(x1,h/2,t,k,x_temp)*(h/2.0f);
-
-    return x1;
+    RK4_method(x_next,h/2,t,k,x_temp);
+    x_temp *= (h/2.0f);
+    x_next += x_temp;
 }
 
 //Given the starting point and the step, this function will return the RK4 update
 //of the deterministic part of the field.
 //REMEMBER: you have to multiply externally by h or your step eventually.
-valarray<float> SDE_SS_System::RK4_method(const valarray<float> &x0,float h,float t,vector<valarray<float>> &k,
-    valarray<float> &x_temp){
+void SDE_SS_System::RK4_method(const valarray<float> &x0,float h,float t,vector<valarray<float>> &k,
+    valarray<float> &update){
 
-    x_temp=x0;
+    update=x0;
 
-    field->f_function(x_temp,t,k[0]); //compute k1
-    x_temp = k[0];
-    x_temp *= (h/2.0f);
-    x_temp += x0;
+    field->f_function(update,t,k[0]); //compute k1
+    update = k[0];
+    update *= (h/2.0f);
+    update += x0;
 
-    field->f_function(x_temp,t+h/2.0f,k[1]); //compute k2
-    x_temp = k[1];
-    x_temp *= (h/2.0f);
-    x_temp += x0;
+    field->f_function(update,t+h/2.0f,k[1]); //compute k2
+    update = k[1];
+    update *= (h/2.0f);
+    update += x0;
 
-    field->f_function(x_temp,t+h/2.0f,k[2]); //compute k3
-    x_temp = k[2];
-    x_temp *= (h/2.0f);
-    x_temp += x0;
+    field->f_function(update,t+h/2.0f,k[2]); //compute k3
+    update = k[2];
+    update *= h;
+    update += x0;
 
-    field->f_function(x_temp,t+h,k[3]); //compute k4
+    field->f_function(update,t+h,k[3]); //compute k4
 
-    valarray<float> res{k[0]};
-    res += 2.0f*k[1];
-    res += 2.0f*k[2];
-    res += k[3];
-    res *= (1.0f/6.0f);
-
-    return res;
+    update = k[0];
+    update += 2.0f*k[1];
+    update += 2.0f*k[2];
+    update += k[3];
+    update *= (1.0f/6.0f);
 }
 
 //##################### CORE FUNCTIONS ##########################################
@@ -383,37 +384,36 @@ Traj SDE_SS_System::simulateTrajectory(const vector<float> &x0,const float perio
     vector<float> times;
 
     //Estimation of the size (for memory opt)
-    values.reserve((period*1.1/h_0)*size);
-    times.reserve(period*1.1/h_0);
+    values.reserve((period*1.1f/h_0)*size);
+    times.reserve(period*1.1f/h_0);
 
     values.insert(values.end(),x0.begin(),x0.end());
-    times.push_back(0.0);
+    times.push_back(0.0f);
 
     float h{h_0}; //The h used step-by-step. Can change to adapt to the boundary
 
     //k vector used by the RK4 method to avoid reallocation
-    vector<valarray<float>> ks(4,valarray<float>(0.0,size));
+    vector<valarray<float>> ks(4,valarray<float>(0.0f,size));
 
     valarray<float> x1,g,n,x_temp; //Used for pooling in evolveTraj and RK4_method
 
-    x1 = valarray<float>(0.0,size);
-    g = valarray<float>(0.0,size);
-    n = valarray<float>(0.0,size);
-    x_temp = valarray<float>(0.0,size);
+    g = valarray<float>(0.0f,size);
+    n = valarray<float>(0.0f,size);
+    x_temp = valarray<float>(0.0f,size);
 
-    valarray<float> current_point(0.0,size);
-    valarray<float> new_point(0.0,size);
+    valarray<float> current_point(0.0f,size);
+    valarray<float> new_point(0.0f,size);
 
     do{
         current_point = valarray<float>(values.data()+(values.size()-size),size);
 
-        new_point = evolveTraj(current_point,h,times.back(),ks,x1,g,n,x_temp); //define the new point
+        evolveTraj(current_point,h,times.back(),ks,new_point,g,n,x_temp); //define the new point
 
         //if out of bound
         if(bounded){
             while(!bounds(new_point)){
-                h = h/10.0;
-                new_point = evolveTraj(current_point,h,times.back(),ks,x1,g,n,x_temp);
+                h = h/10.0f;
+                evolveTraj(current_point,h,times.back(),ks,new_point,g,n,x_temp);
             }
         }
 
@@ -437,35 +437,34 @@ vector<float> SDE_SS_System::simulateTrajectoryLastPoint(const vector<float> &x0
 
     //Setup the initial point of the trajectory
     valarray<float> old_point = valarray<float>(x0.data(),size);
-    float time{0.0};
+    float time{0.0f};
 
     float h{h_0}; //The h used step-by-step. Can change to adapt to the boundary
 
-    vector<valarray<float>> ks(4,valarray<float>(0.0,size)); //k vector used by the RK4 method to avoid reallocation
+    vector<valarray<float>> ks(4,valarray<float>(0.0f,size)); //k vector used by the RK4 method to avoid reallocation
 
     valarray<float> x1,g,n,x_temp; //Used for pooling in evolveTraj and RK4_method
 
-    x1 = valarray<float>(0.0,size);
-    g = valarray<float>(0.0,size);
-    n = valarray<float>(0.0,size);
-    x_temp = valarray<float>(0.0,size);
+    g = valarray<float>(0.0f,size);
+    n = valarray<float>(0.0f,size);
+    x_temp = valarray<float>(0.0f,size);
 
-    valarray<float> new_point(0.0,size);
+    valarray<float> new_point(0.0f,size);
 
     do{
 
-        new_point = evolveTraj(old_point,h,time,ks,x1,g,n,x_temp); //define the new point
+        evolveTraj(old_point,h,time,ks,new_point,g,n,x_temp); //define the new point
 
         //if out of bound
         if(bounded){
             while(!bounds(new_point)){
-                h = h/10.0;
-                new_point = evolveTraj(old_point,h,time,ks,x1,g,n,x_temp);
+                h = h/10.0f;
+                evolveTraj(old_point,h,time,ks,new_point,g,n,x_temp);
             }
         }
 
         //Substitute the old point
-        old_point = new_point;
+        old_point.swap(new_point);
         time += h;
 
         //Reset the step
@@ -473,10 +472,12 @@ vector<float> SDE_SS_System::simulateTrajectoryLastPoint(const vector<float> &x0
 
     }while((time+h)<=period);
 
-    vector<float> point = vector<float>(begin(old_point),end(old_point));
-    point.insert(point.begin(),time);
-
-    return(point);
+    vector<float> point(size + 1);
+    point[0] = time;
+    for(unsigned int i = 0; i < size; ++i) {
+        point[i+1] = old_point[i];
+    }
+    return point;
 }
 
 //This core function acts as simulateTrajectory but it will not return the entire trajectory. In fact, this function
@@ -487,7 +488,7 @@ SetOfPoints SDE_SS_System::simulateTrajectorySOP(const vector<float> &x0,const f
 
     //Setup the initial point of the trajectory
     valarray<float> old_point = valarray<float>(x0.data(),size);
-    float time{0.0};
+    float time{0.0f};
 
     vector<float> values;
     vector<float> times;
@@ -503,25 +504,24 @@ SetOfPoints SDE_SS_System::simulateTrajectorySOP(const vector<float> &x0,const f
     float h{h_0}; //The h used step-by-step. Can change to adapt to the boundary
     unsigned int counter{0}; //Used to keep track of the last found point (to avoid striving at every iteration)
 
-    vector<valarray<float>> ks(4,valarray<float>(0.0,size)); //k vector used by the RK4 method to avoid reallocation
+    vector<valarray<float>> ks(4,valarray<float>(0.0f,size)); //k vector used by the RK4 method to avoid reallocation
     valarray<float> x1,g,n,x_temp; //Used for pooling in evolveTraj and RK4_method
 
-    x1 = valarray<float>(0.0,size);
-    g = valarray<float>(0.0,size);
-    n = valarray<float>(0.0,size);
-    x_temp = valarray<float>(0.0,size);
+    g = valarray<float>(0.0f,size);
+    n = valarray<float>(0.0f,size);
+    x_temp = valarray<float>(0.0f,size);
 
-    valarray<float> new_point(0.0,size);
+    valarray<float> new_point(0.0f,size);
 
     do{
 
-        new_point = evolveTraj(old_point,h,time,ks,x1,g,n,x_temp); //define the new point
+        evolveTraj(old_point,h,time,ks,new_point,g,n,x_temp); //define the new point
 
         //if out of bound
         if(bounded){
             while(!bounds(new_point)){
-                h = h/10.0;
-                new_point = evolveTraj(old_point,h,time,ks,x1,g,n,x_temp);
+                h = h/10.0f;
+                evolveTraj(old_point,h,time,ks,new_point,g,n,x_temp);
             }
         }
 

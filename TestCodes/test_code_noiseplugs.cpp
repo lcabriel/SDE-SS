@@ -68,7 +68,7 @@ int main(){
     Traj traj = system.simulateTrajectory({0.5,0.0},500,0.01); //We need also to give an initial value to the extra variable.
 
     for(size_t i=0;i<traj.getLength();i++){
-        cout << traj.getTimes()[i] << " " << traj.getVars()[i][0] << " " << traj.getVars()[i][1] << endl;// t x(t) W(t)
+        cout << traj.getTimes()[i] << " " << traj.getVars()[traj.flatNotation(i,0)] << " " << traj.getVars()[traj.flatNotation(i,1)] << endl;// t x(t) W(t)
     }
 
     return 0;

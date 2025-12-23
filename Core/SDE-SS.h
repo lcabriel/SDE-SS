@@ -124,16 +124,22 @@ public:
 class Traj{
 
     vector<float> times; //The vector of the time instant of the trajectory
-    vector<vector<float>> vars; //The 2D array of the system variables. Rows: time; Columns: variables.
+    vector<float> vars; //The flat-2D array of the system variables. Rows: time; Columns: variables.
+    unsigned short n_vars; //Number of variables for each time instant
     size_t step_num; //The time length/num of steps of the trajectory.
 
 public:
 
     //CONSTRUCTOR 1: the time vector and the 2D array of variable values using std::move.
-    Traj(vector<float>&& t,vector<vector<float>>&& v);
+    Traj(vector<float>&& t,vector<float>&& v, unsigned short nv);
 
     //CONSTRUCTOR 2: passing another Traj instance.
     Traj(const Traj& t);
+
+    //Given the time index and the variable return the position in the flat vector.
+    const size_t flatNotation(const size_t& TI,const unsigned short& var) const{
+        return (TI*n_vars+var);
+    }
 
     //####################### GET FUNCTIONS ##############################
 
@@ -143,7 +149,7 @@ public:
     }
 
     //Return the reference to the 2D array of the variables in every time instant of the trajectory.
-    const vector<vector<float>>& getVars() const{
+    const vector<float>& getVars() const{
         return vars;
     }
 

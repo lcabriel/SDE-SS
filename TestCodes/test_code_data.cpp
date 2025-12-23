@@ -87,12 +87,12 @@ public:
 
     //To get the first variable.
     float getData(const float t,const valarray<float>& x) override{
-        return data.getVars()[findTimeIndex(t)][0];
+        return data.getVars()[data.flatNotation(findTimeIndex(t),0)];
     }
 
     //To get the second variable.
     float getData2(const float t,const valarray<float>& x){
-        return data.getVars()[TOC][1];
+        return data.getVars()[data.flatNotation(TOC,1)];
     }
 
 };
@@ -160,7 +160,7 @@ int main(){
     ofstream FILE("traj_data.dat");
 
     for(size_t i=0;i<traj2.getLength();i++){
-            FILE << traj2.getVars()[i][0] << " " << traj2.getVars()[i][1] << endl; 
+            FILE << traj2.getVars()[traj2.flatNotation(i,0)] << " " << traj2.getVars()[traj2.flatNotation(i,1)] << endl; 
     }
 
     FILE.close();

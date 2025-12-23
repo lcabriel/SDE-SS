@@ -202,13 +202,12 @@ size_t DataLinker::findTimeIndex(const float t){
 float DataLinker::interpolData(const float& t,const unsigned int& var){
     size_t t_i = findTimeIndex(t);
 
-    const float y1 = data.getVars()[t_i][var];
-    const float y2 = data.getVars()[t_i + 1][var];
-    const float x1 = data.getTimes()[t_i];
-    const float x2 = data.getTimes()[t_i + 1];
+    const vector<float> p1 = data.getInstant(t_i);
+    const vector<float> p2 = data.getInstant(t_i+1);
 
-    return (y1+(t-x1)*(y2-y1)/(x2-x1));
+    return (p1[var]+(t-p1[0])*(p2[var]-p1[var])/(p2[0]-p1[0]));
 }
+
 
 //Given a certain time instant the getData returns a child-defined float value near to the given time.
 float DataLinker::getData(const float t,const valarray<float>& x){    
@@ -235,8 +234,8 @@ void DataLinker::resetTimeOptimizationCounter(){
 //##############################################################################################################################################################
 
 //CONSTRUCTOR: the time vector and the 2D array of variable values using "std::move".
-Traj::Traj(vector<float>&& t, vector<vector<float>>&& v): times(move(t)), vars(move(v)) {
-    if(times.size() != vars.size())
+Traj::Traj(vector<float>&& t, vector<float>&& v, unsigned short nv): times(move(t)), vars(move(v)), n_vars(nv) {
+    if(times.size() != vars.size()/nv)
         error("Traj: Constructor: Runtime error: Times vector has different number of steps than the variables 2D vector");
     step_num = times.size();
 }
@@ -246,12 +245,12 @@ Traj::Traj(const Traj& t): times(t.getTimes()),vars(t.getVars()),step_num(t.getL
 
 //Given a certain time index, this function will return the situation as a vector of times+vars 
 vector<float> Traj::getInstant(const size_t index) const{
-    vector<float> output(vars[0].size()+1,0.0);
+    vector<float> output(n_vars+1,0.0);
 
     output[0] = times[index];
 
-    for(unsigned int i=0;i<vars[0].size();i++){
-        output[i+1] = vars[index][i];
+    for(unsigned int i=0;i<n_vars;i++){
+        output[i+1] = vars[flatNotation(index,i)];
     }
 
     return output;
@@ -368,14 +367,14 @@ Traj SDE_SS_System::simulateTrajectory(const vector<float> &x0,const float perio
     checkTrajInput(x0,period,h_0); //Check if the inputs are meaningful
 
     //Setup the initial point of the trajectory
-    vector<vector<float>> values;
+    vector<float> values;
     vector<float> times;
 
     //Estimation of the size (for memory opt)
-    values.reserve(period*1.1/h_0);
+    values.reserve((period*1.1/h_0)*size);
     times.reserve(period*1.1/h_0);
 
-    values.push_back(x0);
+    values.insert(values.end(),x0.begin(),x0.end());
     times.push_back(0.0);
 
     float h{h_0}; //The h used step-by-step. Can change to adapt to the boundary
@@ -390,10 +389,13 @@ Traj SDE_SS_System::simulateTrajectory(const vector<float> &x0,const float perio
     n = valarray<float>(0.0,size);
     x_temp = valarray<float>(0.0,size);
 
-    do{
-        valarray<float> current_point(values.back().data(),size);
+    valarray<float> current_point;
+    valarray<float> new_point;
 
-        valarray<float> new_point{evolveTraj(current_point,h,times.back(),ks,x1,g,n,x_temp)}; //define the new point
+    do{
+        current_point = valarray<float>(values.data()+(values.size()-size),size);
+
+        new_point = evolveTraj(current_point,h,times.back(),ks,x1,g,n,x_temp); //define the new point
 
         //if out of bound
         if(bounded){
@@ -404,7 +406,7 @@ Traj SDE_SS_System::simulateTrajectory(const vector<float> &x0,const float perio
         }
 
         //Add the new point
-        values.emplace_back(vector<float>(begin(new_point),end(new_point)));
+        values.insert(values.end(),&new_point[0],&new_point[0]+size);
         times.emplace_back(times.back()+h);
 
         //Reset the step
@@ -413,7 +415,7 @@ Traj SDE_SS_System::simulateTrajectory(const vector<float> &x0,const float perio
     }while((times.back()+h)<=period);
 
     //Return the Traj object
-    return Traj(move(times),move(values));
+    return Traj(move(times),move(values),size);
 }
 
 //This core function acts as simulateTrajectory, however the internal points of the trajectory are not saved and only
@@ -857,7 +859,7 @@ float SDE_SS_System::computeAutocorrelation(const Traj& traj,unsigned int axis,f
     //2. We need then to compute the time mean of the trajectory for the axis
     float mean{0.0};
     for(size_t i=0;i<traj.getLength();i++){
-        mean += traj.getVars()[i][axis];
+        mean += traj.getVars()[traj.flatNotation(i,axis)];
     }
     mean = mean/traj.getLength();
 
@@ -865,12 +867,12 @@ float SDE_SS_System::computeAutocorrelation(const Traj& traj,unsigned int axis,f
     float cov{0.0};
     float var{0.0};
     for(size_t i=0;i<traj.getLength()-1-window;i++){
-        cov += (traj.getVars()[i][axis]-mean)*(traj.getVars()[i+window][axis]-mean);
-        var += (traj.getVars()[i][axis]-mean)*(traj.getVars()[i][axis]-mean);
+        cov += (traj.getVars()[traj.flatNotation(i,axis)]-mean)*(traj.getVars()[traj.flatNotation(i+window,axis)]-mean);
+        var += (traj.getVars()[traj.flatNotation(i,axis)]-mean)*(traj.getVars()[traj.flatNotation(i,axis)]-mean);
     }
     //We need also to complete the variance
     for(size_t i=traj.getLength()-1-window;i<traj.getLength()-1;i++){
-        var += (traj.getVars()[i][axis]-mean)*(traj.getVars()[i][axis]-mean);
+        var += (traj.getVars()[traj.flatNotation(i,axis)]-mean)*(traj.getVars()[traj.flatNotation(i,axis)]-mean);
     }
 
     return cov/var;

@@ -233,7 +233,7 @@ void DataLinker::resetTimeOptimizationCounter(){
 //########################################################### TRAJECTORY #############################################################################
 //##############################################################################################################################################################
 
-//CONSTRUCTOR: the time vector and the 2D array of variable values using "std::move".
+//CONSTRUCTOR 1: the time instants vector, the flat 2D array of variable values and the number of vars using std::move.
 Traj::Traj(vector<float>&& t, vector<float>&& v, unsigned short nv): times(move(t)), vars(move(v)), n_vars(nv) {
     if(times.size() != vars.size()/nv)
         error("Traj: Constructor: Runtime error: Times vector has different number of steps than the variables 2D vector");
@@ -273,8 +273,8 @@ TimePicture::TimePicture(const TimePicture& TP): points(TP.getAllPoints()),T(TP.
 //########################################################### SET OF POINTS #############################################################################
 //##############################################################################################################################################################
 
-//CONSTRUCTOR 1: the time instants vector and the 2D array of variable values using std::move.
-SetOfPoints::SetOfPoints(vector<float>&& t,vector<vector<float>>&& v): times(move(t)), vars(move(v)) {
+//CONSTRUCTOR 1: the time instants vector, the flat 2D array of variable values and the number of vars using std::move.
+SetOfPoints::SetOfPoints(vector<float>&& t,vector<float>&& v,unsigned short nv): times(move(t)), vars(move(v)), n_vars(nv) {
     if(times.size() != vars.size())
         error("SetOfPoints: Constructor: Runtime error: Times vector has different number of instants than the variables 2D vector");
 }
@@ -284,12 +284,12 @@ SetOfPoints::SetOfPoints(const SetOfPoints& sop): times(sop.getTimes()),vars(sop
 
 //Given a certain index, this function will return the situation as a vector of times+vars 
 vector<float> SetOfPoints::getInstant(const size_t index) const{
-    vector<float> output(vars[0].size()+1,0.0);
+    vector<float> output(n_vars+1,0.0);
 
     output[0] = times[index];
 
-    for(unsigned int i=0;i<vars[0].size();i++){
-        output[i+1] = vars[index][i];
+    for(unsigned int i=0;i<n_vars;i++){
+        output[i+1] = vars[flatNotation(index,i)];
     }
 
     return output;
@@ -345,17 +345,29 @@ valarray<float> SDE_SS_System::RK4_method(const valarray<float> &x0,float h,floa
     x_temp=x0;
 
     field->f_function(x_temp,t,k[0]); //compute k1
-    x_temp = x0+(h/2.0f)*k[0];
+    x_temp = k[0];
+    x_temp *= (h/2.0f);
+    x_temp += x0;
 
-    field->f_function(x_temp,t,k[1]); //compute k2
-    x_temp = x0+(h/2.0f)*k[1];
+    field->f_function(x_temp,t+h/2.0f,k[1]); //compute k2
+    x_temp = k[1];
+    x_temp *= (h/2.0f);
+    x_temp += x0;
 
-    field->f_function(x_temp,t,k[2]); //compute k3
-    x_temp = x0+h*k[2];
+    field->f_function(x_temp,t+h/2.0f,k[2]); //compute k3
+    x_temp = k[2];
+    x_temp *= (h/2.0f);
+    x_temp += x0;
 
-    field->f_function(x_temp,t,k[3]); //compute k4
+    field->f_function(x_temp,t+h,k[3]); //compute k4
 
-    return (k[0]+2.0f*k[1]+2.0f*k[2]+k[3])*(1.0f/6.0f);
+    valarray<float> res{k[0]};
+    res += 2.0f*k[1];
+    res += 2.0f*k[2];
+    res += k[3];
+    res *= (1.0f/6.0f);
+
+    return res;
 }
 
 //##################### CORE FUNCTIONS ##########################################
@@ -389,8 +401,8 @@ Traj SDE_SS_System::simulateTrajectory(const vector<float> &x0,const float perio
     n = valarray<float>(0.0,size);
     x_temp = valarray<float>(0.0,size);
 
-    valarray<float> current_point;
-    valarray<float> new_point;
+    valarray<float> current_point(0.0,size);
+    valarray<float> new_point(0.0,size);
 
     do{
         current_point = valarray<float>(values.data()+(values.size()-size),size);
@@ -438,9 +450,11 @@ vector<float> SDE_SS_System::simulateTrajectoryLastPoint(const vector<float> &x0
     n = valarray<float>(0.0,size);
     x_temp = valarray<float>(0.0,size);
 
+    valarray<float> new_point(0.0,size);
+
     do{
 
-        valarray<float> new_point{evolveTraj(old_point,h,time,ks,x1,g,n,x_temp)}; //define the new point
+        new_point = evolveTraj(old_point,h,time,ks,x1,g,n,x_temp); //define the new point
 
         //if out of bound
         if(bounded){
@@ -475,10 +489,10 @@ SetOfPoints SDE_SS_System::simulateTrajectorySOP(const vector<float> &x0,const f
     valarray<float> old_point = valarray<float>(x0.data(),size);
     float time{0.0};
 
-    vector<vector<float>> values;
+    vector<float> values;
     vector<float> times;
 
-    values.reserve(instants.size());
+    values.reserve(instants.size()*size);
     times.reserve(instants.size());
 
     //Setup all the other useful variables
@@ -497,9 +511,11 @@ SetOfPoints SDE_SS_System::simulateTrajectorySOP(const vector<float> &x0,const f
     n = valarray<float>(0.0,size);
     x_temp = valarray<float>(0.0,size);
 
+    valarray<float> new_point(0.0,size);
+
     do{
 
-        valarray<float> new_point{evolveTraj(old_point,h,time,ks,x1,g,n,x_temp)}; //define the new point
+        new_point = evolveTraj(old_point,h,time,ks,x1,g,n,x_temp); //define the new point
 
         //if out of bound
         if(bounded){
@@ -516,7 +532,7 @@ SetOfPoints SDE_SS_System::simulateTrajectorySOP(const vector<float> &x0,const f
         if(counter < instants.size()){
             if(time >= sort_inst[counter]){
                 counter++;
-                values.push_back(vector<float>(begin(old_point),end(old_point)));
+                values.insert(values.end(),&old_point[0],&old_point[0]+size);
                 times.push_back(time-h);
             }
         }
@@ -529,7 +545,7 @@ SetOfPoints SDE_SS_System::simulateTrajectorySOP(const vector<float> &x0,const f
 
     }while((time+h)<=period);
 
-    return SetOfPoints(move(times),move(values));
+    return SetOfPoints(move(times),move(values),size);
 }
 
 //This function will automatically produce a group of the trajectories to obtain the value in a time instant. 

@@ -130,7 +130,7 @@ class Traj{
 
 public:
 
-    //CONSTRUCTOR 1: the time vector and the 2D array of variable values using std::move.
+    //CONSTRUCTOR 1: the time vector, the flat 2D array of variable values and the number of vars using std::move.
     Traj(vector<float>&& t,vector<float>&& v, unsigned short nv);
 
     //CONSTRUCTOR 2: passing another Traj instance.
@@ -257,15 +257,22 @@ public:
 class SetOfPoints{
 
     vector<float> times; //The vector of the time instants of the set
-    vector<vector<float>> vars; //The 2D array of the system variables. Rows: time instants; Columns: variables.
+    vector<float> vars; //The flat 2D array of the system variables. Rows: time instants; Columns: variables.
+
+    unsigned short n_vars; //Number of variables for each time instant
 
 public:
 
-    //CONSTRUCTOR 1: the time instants vector and the 2D array of variable values using std::move.
-    SetOfPoints(vector<float>&& t,vector<vector<float>>&& v);
+    //CONSTRUCTOR 1: the time instants vector, the flat 2D array of variable values and the number of vars using std::move.
+    SetOfPoints(vector<float>&& t,vector<float>&& v,unsigned short nv);
 
     //CONSTRUCTOR 2: passing another SetOfPoints instance.
     SetOfPoints(const SetOfPoints& sop);
+
+    //Given the time index and the variable return the position in the flat vector.
+    const size_t flatNotation(const size_t& TI,const unsigned short& var) const{
+        return (TI*n_vars+var);
+    }
 
     //####################### GET FUNCTIONS ##############################
 
@@ -275,7 +282,7 @@ public:
     }
 
     //Return the reference to the 2D array of the variables in every time instant of the set.
-    const vector<vector<float>>& getVars() const{
+    const vector<float>& getVars() const{
         return vars;
     }
 

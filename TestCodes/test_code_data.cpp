@@ -49,6 +49,11 @@ public:
         setNoise(N);
     }
 
+    //Implement this function in this exact shape in the your FieldClass is MANDATORY
+    FieldClass* clone() const override{
+        return new myField(*this);
+    }
+
     //The f_function definition: we are going to say as each variable of the system
     //should be update. This design is similar to the system of equations' shape.
     void f_function_impl(const valarray<float> &x,float t,valarray<float> &y) const override{
@@ -111,6 +116,11 @@ public:
         tau = t;
         linker = DL;
         setNoise(N);
+    }
+
+    //Implement this function in this exact shape in the your FieldClass is MANDATORY
+    FieldClass* clone() const override{
+        return new DataField(*this);
     }
 
     //The f_function definition: let's suppose that the field with data linker is only 2D because is a different system.

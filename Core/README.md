@@ -10,10 +10,12 @@ This class is used to represent the noise aspect of the fields. This class is me
 *WienerMilstein* (see below) are child of this one. Feel free to implement your own *NoiseClass*-es: to do this the only function you need to
 override is
 
-- *valarray&lt;float&gt; compute_noise(const valarray&lt;float&gt; &x_i,float\* h))*: this class is used by the field to compute the noise. Here you need to
-	put the actual "form" of your noise. As example you can look to *WienerMilstein*. The class can accept the point *x_i* if your noise is
-	based on the coordinates or if you are reserving a variable to keep track of the noise (e.g. Ornstein-Uhlenbeck). It will require also
+- *void compute_noise(const valarray&lt;float&gt; &x_i,float\* h,valarray&lt;float&gt; &x_out)*: this class is used by the field to compute the noise. 
+	Here you need to put the actual "form" of your noise. As example you can look to *WienerMilstein*. The class can accept the point *x_i* if 
+	your noise is based on the coordinates or if you are reserving a variable to keep track of the noise (e.g. Ornstein-Uhlenbeck). It will require also
 	the step length of your simulation's step.
+
+If you create your own NoiseClass there are some function to implement mandatorily. For more information please, look to *SDE-SS.cpp*.
 
 ## Wiener noise with Euler-Maruyama ("WienerEuler"):
 
@@ -21,17 +23,17 @@ This child of *NoiseClass* implements the gaussian white noise or Wiener process
 of the noise with a constant is leaved for the *g_function* thus this class do not require any parameter upon construction. The random engine
 is a mt19937 with a seed based on the instantiation time and the pointer of the entity.
 
-- *valarray&lt;float&gt; compute_noise(const valarray&lt;float&gt; &x_i,float\* h))*: the virtual function is override in this version and the function will
-	return a vector with the size equal to the dimensionality of the system with, in every slot, a *dW* computed separately in case you have
-	multiple SDEs or you required multiple increments for some reasons.
+- *void compute_noise(const valarray&lt;float&gt; &x_i,float\* h,valarray&lt;float&gt; &x_out)*: the virtual function is override in this version
+	and the function will return a vector via argument (*x_out*) with the size equal to the dimensionality of the system with, in every slot, 
+	a *dW* computed separately in case you have multiple SDEs or you required multiple increments for some reasons.
 
 ## Wiener noise with Milstein ("WienerMilsten"):
 
 Conceptually similar than before this class do the same thing as the *WienerEuler* but using the Milstein method. Due to this, it requires as
 an argument a function which should be the derivative of your *g_function* that you use in the field. The *g_function* should be expressed as a *const valarray&lt;float&gt; -&gt; valarray&lt;float&gt;* function. The other features are the same as Wiener-Euler.
 
-- *valarray&lt;float&gt; compute_noise(const valarray&lt;float&gt; &x_i,float\* h))*: as before, the function will return a vector of increments but computed
-	using the Milstein method instead of the Euler-Maruyama.
+- *void compute_noise(const valarray&lt;float&gt; &x_i,float\* h,valarray&lt;float&gt; &x_out)*: as before, the function will return via argument a vector of 
+	increments but computed using the Milstein method instead of the Euler-Maruyama.
 
 ## Generic FieldClass ("FieldClass"):
 
@@ -48,6 +50,8 @@ by the other classes of the library. To see how to override these two, please lo
 	*g(x)* part of Ito's formula.
 - *valarray&lt;float&gt; getNoise(const valarray&lt;float&gt; &x_i,float\* h)*: Upon call, this function will call the *compute_noise* function of the *NoiseClass*
 	of your field that you should have set at construction.
+- *FieldClass\* clone() const*: this function must be implemented by you in your class in certain precise way. Please copy how it is done inside the tests we have
+    provided you inside the TestCodes subdirectory. 
 
 ## Trajectory ("Traj"):
 
@@ -62,8 +66,7 @@ This class is used to represent a trajectory of a system of SDEs. This is the ty
 This class is used to represent the concept of "time picture": this is a set of N points taken from N simulated trajectory of the SDEs system at a given
 time instant T. It is like taking a picture of the system situation after a certain time T collecting the values that the set of N trajectory had at that
 moment. As the Trajectory class, this is purely an object class to manage easily th values of the trajectories at that time instant. It is the product
-of the *computeTimePicture* function. In *TimePicture*, there are stored the values in a 2D array with along the rows the different simulations and along
-the columns the variables of the SDEs system. There are also saved the time instant of reference and the number of simulations.
+of the *computeTimePicture* function. In *TimePicture*, there are stored the values in a flat 2D array of the values of the variable with time instants -> variables order. There are also saved the time instant of reference and the number of simulations.
 
 - *getAllPoints()*, *getNumSim()*, *getTimeInstant()*: these 3 get functions return respectively the three internal variables of the trajectory.
 - *vector&lt;float&gt;& getPoint(size_t p)*: given a specific simulation by index with p, this function return the values of that simulation at the time instant of
@@ -97,10 +100,8 @@ trajectories and giving some useful tool to elaborate trajectories in an efficie
 
 - **Core functions**: the fundamental ones, what you are going to use the most.
 - **Public Utility functions**: small functions used to manage some aspect of your system and the simulations.
-- **Tool functions**: also called *heavy*, this functions perform more complex tasks based on the simulations produced by the others.
 
-We are going to explore then more deeply the three areas. The *SDE_SS_System* is also completely parallelized using OpenMp in the mechanics of the
-heavy functions to grant good performances.
+We are going to explore then more deeply these areas. 
 Upon construction, a *SDE_SS_System* will require as arguments the size of your system (a.k.a. the number of equations/variables), the pointer to
 a FieldClass (or its children) instance and, optionally, a boolean value to express if the system is bounded (if it is, please take a look to *setBoundFunction*).
 
@@ -120,7 +121,38 @@ aspect of your system.
 	of the previous twos, this function will not keep all the intermediate values of the trajectories but only the ones indicated by the *instants* input. Actually
 	it is difficult and consuming to obtain the exact values so the points immediately before is taken.
 
-A little more articulate is the function to produce TimePictures
+### Public Utility functions:
+
+These small functions are actually quite important and are implemented to set some important features of the system, such as the bounds of the process (if bounded)
+and the number of threads used in the parallel operations.
+
+- *void setBoundFunction(function&lt;bool(const valarray&lt;float&gt;&)&gt; f)*: if, during the construction procedure of a *SDE_SS_System* instance, the system is
+	characterized as "bounded", you have also to set the bound function manually using this function. This function is used to check if the system is
+	within the limit at every new time step (if it is not, the evolution is tried again with a smaller step). Considering this, it should be a *valarray&lt;float&gt; -&gt; bool* function.
+- *static size_t findTimeIndex(const vector&lt;float&gt; &times,float TI)*: this static function is actually made to be used by certain Tool functions however it does
+	not depend on the system characteristics and can be useful. Given a vector of times this function will found the last slot of the vector which time value is
+	immedialtely lesser than the passed time index *TI*.
+
+## Complex Function Manager ("CompFuncManager"):
+
+There are in the complex system field a lot of recurring tasks such as compute probability distributions or autocorrelations. We decided to cover these tasks in a
+very efficient way and exploiting our *SDE_SS_System* engine. This class is a container for these useful functions. It is constructed similar to a system with some
+difference (see test codes for examples). There characteristics will be used to produce multiple systems to parallelize optimally the operations. 
+These functions are optimized and strongly parallelized exploting OpenMP. As for the system we have some Public Utility functions and some Tool functions (the different tasks).
+
+### Public Utility functions:
+
+These small functions are actually quite important and are implemented to set some important features of the manager, such as the number of threads used in the parallel operations.
+
+- *void setNumThreads(unsigned int N)*: all the Tool functions (see below) are parallelized. The number of threads used for the parallelisation
+	is set equal to **8** by default. However, it is possible to change the number of threads used by these heavy functions with this public utility function.
+- *static size_t findTimeIndex(const vector&lt;float&gt; &times,float TI)*: this static function is actually made to be used by certain Tool functions however it does
+	not depend on the manager characteristics and can be useful. Given a vector of times this function will found the last slot of the vector which time value is
+	immedialtely lesser than the passed time index *TI*.
+
+### Tool functions:
+
+The Tool functions are functions (most of them heavy) that elaborates trajectories and time pictures to obtain common type of results used in papers and in research. All of them exploit parallelization using OpenMP, therefore they should be able to work perfectly even linearly, obviously with worse performances.
 
 - *TimePicture produceTimePicture(\[TOO MANY\])*: this complex function produced a so-called Time Picture. A Time Picture is, given a set of trajectories, 
 	the set of the values of the trajectories in a given time instant. This function requires a lot of arguments but produces its own trajectories internally. Therefore it needs:
@@ -135,24 +167,6 @@ A little more articulate is the function to produce TimePictures
 		are used.
 
 	Doing this, this function will return a TimePicture instance.
-
-### Public Utility functions:
-
-These small functions are actually quite important and are implemented to set some important features of the system, such as the bounds of the process (if bounded)
-and the number of threads used in the parallel operations.
-
-- *void setBoundFunction(function&lt;bool(const valarray&lt;float&gt;&)&gt; f)*: if, during the construction procedure of a *SDE_SS_System* instance, the system is
-	characterized as "bounded", you have also to set the bound function manually using this function. This function is used to check if the system is
-	within the limit at every new time step (if it is not, the evolution is tried again with a smaller step). Considering this, it should be a *valarray&lt;float&gt; -&gt; bool* function.
-- *void setNumThreads(unsigned int N)*: all the Tool functions (see below) are parallelized on a certain degree. The number of threads used for the parallelisation
-	is set equal to **8** by default. However, it is possible to change the number of threads used by these heavy functions with this public utility function.
-- *static size_t findTimeIndex(const vector&lt;float&gt; &times,float TI)*: this static function is actually made to be used by certain Tool functions however it does
-	not depend on the system characteristics and can be useful. Given a vector of times this function will found the last slot of the vector which time value is
-	immedialtely lesser than the passed time index *TI*.
-
-### Tool functions:
-
-The Tool functions are functions (most of them heavy) that elaborates trajectories and time pictures to obtain common type of results used in papers and in research. All of them exploit parallelization using OpenMP, therefore they should be able to work perfectly even linearly, obviously with worse performances.
 
 - *vector&lt;vector&lt;float&gt;&gt; PDF_1D(\[TOO MANY\])*: the idea is fairly simple: given a time picture and chosen a variable, this function will produce a bins
 	system of same width along that variable ("axis"). Certainly, there are some features to define with the arguments:

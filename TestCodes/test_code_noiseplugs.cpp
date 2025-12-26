@@ -37,6 +37,11 @@ public:
         setNoise(N);
     }
 
+    //Implement this function in this exact shape in the your FieldClass is MANDATORY
+    FieldClass* clone() const override{
+        return new myField(*this);
+    }
+
     //Then we have to override f(x) and g(x)
 
     //In the f(x) we have in [0] all the field of the main system while we need to add

@@ -44,6 +44,11 @@ public:
         setNoise(N);
     }
 
+    //Implement this function in this exact shape in the your FieldClass is MANDATORY
+    FieldClass* clone() const override{
+        return new myField(*this);
+    }
+
     //The f_function definition: we are going to say as each variable of the system
     //should be update. This design is similar to the system of equations' shape.
     void f_function_impl(const valarray<float> &x,float t,valarray<float> &y) const override{
@@ -103,10 +108,18 @@ int main(){
     //Having defined the system as "bounded" we need also to pass the bound function
     system.setBoundFunction(boundaries);
 
-    //Computing the PDF is heavy so we increase the number of threads used by heavy operations from 8 to 10
-    system.setNumThreads(10);
-
     Traj T = system.simulateTrajectory({0.5,0.0,0.0},2000,0.01);
+
+    /* We want now to compute some complex things such as probability distribution. SDE-SS give the possibility to do this
+    in an optimized way using a Complex Function Manager object. For all the available function, please look at the documentation.
+    */
+
+    //A Complex Function Manager needs some info on your system thus will require the size of the system, the field reference,
+    //if it is bounded or not. In the first case it is also required as fourth argument the boundary function.
+    CompFuncManager CFM(3,&field,true,boundaries);
+
+    //Then we set the number of threads to tell to the CFM the number of threads to use to parallelize the complex functions (default=8).
+    CFM.setNumThreads(10);
 
     /*We want our PDF in the instant equal to the last step thus we need to create first a TimePicture of the system.
     The points in the TimePicture are stored in a 2D array with along the row the trajectories and along the columns
@@ -119,7 +132,7 @@ int main(){
     - 5°: being not fixed, we need the initial condition functions. If fixed an array x0 is required
     - 6° (NOT VISIBLE): is the time instant, if not specified it is the last step of the trajectories.
     */
-    TimePicture picture=system.produceTimePicture(2000,0.01,50,true,{{}},initial_cond_function);
+    TimePicture picture=CFM.produceTimePicture(2000,0.01,50,true,{{}},initial_cond_function);
 
     //Created the time picture we can transform it into a 1D bin. We need to pass it to the PDF_1D function with:
     //2°: the number of bins
@@ -127,7 +140,7 @@ int main(){
     //4: the boolean is to have an auto adaptive domain. If true, the min and the max of the values in the picture
     //are used as extremes and the Nbins constructed between them.
     //5: Having chose a fixed domain we need to pass the domain as a vector.
-    vector<vector<float>> bins = system.PDF_1D(picture,50,1,false,{0.0,1.0});
+    vector<vector<float>> bins = CFM.PDF_1D(picture,50,1,false,{0.0,1.0});
 
     //THIS LAST PART IS USED SIMPLY TO SAVE THE RESULTS.
     ofstream FILE("test_bins.dat");

@@ -13,6 +13,7 @@
 #include <omp.h>
 #include <algorithm>
 #include <valarray>
+#include <cstring>
 
 using namespace std;
 
@@ -22,6 +23,115 @@ using namespace std;
     exit(EXIT_FAILURE);
 }
 
+//#################################################### RANDOM NUMBER GENERATOR #######################################################
+//In this section we implement some class and methods that are used to generate random numbers in our library. In particular we opted
+//a PCG32 random engine and for the gaussian distribution a Ziggurat Algorithm.
+
+/*
+ High-performance Random Number Generator (Permuted Congruential Generator).
+ Based on the algorithm by Melissa O'Neill, PCG32 is specifically optimized for SDE simulations:
+ - MINIMAL STATE: It requires only 16 bytes of memory (compared to 2.5KB for mt19937), 
+   ensuring excellent L1 cache locality, which is critical in multi-threaded (OpenMP) contexts.
+ - XSH-RR TRANSFORMATION: It applies a fixed bit-shift and a dynamic "Random Rotate" 
+   to the 64-bit internal LCG state. This eliminates the linear correlations typical 
+   of standard LCGs and produces statistically robust 32-bit outputs.
+ */
+class PCG32 {
+private:
+    uint64_t state;
+    uint64_t inc;
+
+public:
+
+    //CONSTRUCTOR: The first parameter (seed) set the state while seq (the second parameter)
+    //allow to have different sequences with the same seed.
+    PCG32(uint64_t seed = 0x4d595df4d0f33173ULL, uint64_t seq = 1u) {
+        state = 0U;
+        inc = (seq << 1u) | 1u;
+        next();
+        state += seed;
+        next();
+    }
+
+    //Obtain the next random 64-bit state.
+    uint32_t next() {
+        uint64_t oldstate = state;
+        //Linear LCG: multiplication and increment
+        state = oldstate * 6364136223846793005ULL + inc;
+        //Output Transformation  (XSH RR)
+        uint32_t xorshifted = static_cast<uint32_t>(((oldstate >> 18u) ^ oldstate) >> 27u);
+        uint32_t rot = static_cast<uint32_t>(oldstate >> 59u);
+        return (xorshifted >> rot) | (xorshifted << ((-rot) & 31u));
+    }
+
+    //Generate a random float in [0,1) with 24 bit precision (float's mantiss)
+    float nextFloat() {
+        return (next() >> 8) * 0x1.0p-24f;
+    }
+
+    //Generate a gaussian distributed number using the Ziggurat Algorithm.
+    float nextGaussian();
+};
+
+//ZIGGURAT TABLES (128 BLOCKS):
+//Internal bounds
+static const uint32_t zig_kn[128] = {
+    0, 3749721382, 3866291672, 3925762886, 3965905151, 3996227494, 4020584400, 4040941893,
+    4058434698, 4073749504, 4087353986, 4099591461, 4110727915, 4120970347, 4130477141, 4139368817,
+    4147735395, 4155649987, 4163171329, 4170348701, 4177224217, 4183834382, 4190209930, 4196377852,
+    4202361958, 4208183577, 4213861895, 4219414212, 4224855909, 4230199321, 4235454924, 4240631627,
+    4245736932, 4250777033, 4255757049, 4260681146, 4265552599, 4270373998, 4275147817, 4279876359,
+    4284561803, 4289206214, 4293811559, 4298379634, 4302912117, 4307410537, 4311876307, 4316310723,
+    4320715014, 4325090333, 4329437783, 4333758398, 4338053158, 4342322998, 4346568813, 4350791452,
+    4354991733, 4359170442, 4363328334, 4367466133, 4371584534, 4375684200, 4379765759, 4383829813,
+    4387876939, 4391907693, 4395922610, 4399922204, 4403906967, 4407877372, 4411833871, 4415776900,
+    4419706877, 4423624207, 4427529278, 4431422461, 4435304113, 4439174577, 4443034188, 4446883269,
+    4450722131, 4454551075, 4458370392, 4462180362, 4465981251, 4469773315, 4473556799, 4477331940,
+    4481098967, 4484858097, 4488609539, 4492353495, 4496089163, 4499818731, 4503541400, 4507257358,
+    4510966787, 4514669865, 4518366768, 4522057667, 4525742728, 4529422114, 4533095984, 4536764500,
+    4540427820, 4544086100, 4547739493, 4551388152, 4555032228, 4558671869, 4562307222, 4565938431,
+    4569565640, 4573188989, 4576808617, 4580424660, 4584037254, 4587646532, 4591252627, 4594855669,
+    4598455787, 4602053106, 4605647754, 4609239855, 4612829532, 4616416905, 4619992019, 4623564998
+};
+//Scaling factors
+static const float zig_wn[128] = {
+    0.0008003102f, 0.0007559146f, 0.0007217031f, 0.0006941198f, 0.0006711467f, 0.0006515250f, 0.0006344212f, 0.0006192774f,
+    0.0006057053f, 0.0005934177f, 0.0005821935f, 0.0005718642f, 0.0005623010f, 0.0005534024f, 0.0005450871f, 0.0005372895f,
+    0.0005299534f, 0.0005230303f, 0.0005164778f, 0.0005102591f, 0.0005043425f, 0.0004987011f, 0.0004933111f, 0.0004881515f,
+    0.0004832039f, 0.0004784518f, 0.0004738804f, 0.0004694770f, 0.0004652294f, 0.0004611270f, 0.0004571603f, 0.0004533206f,
+    0.0004496001f, 0.0004459914f, 0.0004424881f, 0.0004400000f, 0.0004358137f, 0.0004326173f, 0.0004295055f, 0.0004264738f,
+    0.0004235183f, 0.0004206354f, 0.0004178220f, 0.0004150752f, 0.0004123924f, 0.0004097712f, 0.0004072092f, 0.0004047043f,
+    0.0004022543f, 0.0003998573f, 0.0003975113f, 0.0003952146f, 0.0003929654f, 0.0003907621f, 0.0003886034f, 0.0003864877f,
+    0.0003844137f, 0.0003823800f, 0.0003803856f, 0.0003784291f, 0.0003765095f, 0.0003746257f, 0.0003727766f, 0.0003709611f,
+    0.0003691783f, 0.0003674272f, 0.0003657071f, 0.0003640169f, 0.0003623561f, 0.0003607237f, 0.0003591189f, 0.0003575412f,
+    0.0003559897f, 0.0003544637f, 0.0003529626f, 0.0003514857f, 0.0003500325f, 0.0003486022f, 0.0003471944f, 0.0003458085f,
+    0.0003444439f, 0.0003431001f, 0.0003417765f, 0.0003404727f, 0.0003391881f, 0.0003379224f, 0.0003366751f, 0.0003354458f,
+    0.0003342340f, 0.0003330393f, 0.0003318613f, 0.0003306997f, 0.0003295541f, 0.0003284242f, 0.0003273096f, 0.0003262100f,
+    0.0003251250f, 0.0003240545f, 0.0003229980f, 0.0003219553f, 0.0003209262f, 0.0003199103f, 0.0003189075f, 0.0003179174f,
+    0.0003169397f, 0.0003159744f, 0.0003150210f, 0.0003140795f, 0.0003131496f, 0.0003122310f, 0.0003113236f, 0.0003104270f,
+    0.0003095412f, 0.0003086659f, 0.0003078008f, 0.0003069459f, 0.0003061009f, 0.0003052657f, 0.0003044400f, 0.0003036237f,
+    0.0003028167f, 0.0003020188f, 0.0003012297f, 0.0003004495f, 0.0002996778f, 0.0002989146f, 0.0002981597f, 0.0002974129f
+};
+//Function values
+static const float zig_fn[128] = {
+    1.0000000f, 0.9918931f, 0.9839305f, 0.9761096f, 0.9684281f, 0.9608833f, 0.9534731f, 0.9461951f,
+    0.9390471f, 0.9320271f, 0.9251329f, 0.9183625f, 0.9117140f, 0.9051855f, 0.8987748f, 0.8924803f,
+    0.8863001f, 0.8802324f, 0.8742755f, 0.8684277f, 0.8626873f, 0.8570526f, 0.8515222f, 0.8460944f,
+    0.8407677f, 0.8355407f, 0.8304120f, 0.8253802f, 0.8204440f, 0.8156020f, 0.8108530f, 0.8061957f,
+    0.8016289f, 0.7971515f, 0.7927622f, 0.7884599f, 0.7842436f, 0.7801121f, 0.7760645f, 0.7721000f,
+    0.7682173f, 0.7644158f, 0.7606944f, 0.7570524f, 0.7534888f, 0.7500028f, 0.7465936f, 0.7432599f,
+    0.7400013f, 0.7368171f, 0.7337063f, 0.7306682f, 0.7277021f, 0.7248073f, 0.7219832f, 0.7192288f,
+    0.7165437f, 0.7139270f, 0.7113781f, 0.7088962f, 0.7064808f, 0.7041312f, 0.7018468f, 0.6996270f,
+    0.6974712f, 0.6953787f, 0.6933491f, 0.6913817f, 0.6894759f, 0.6876313f, 0.6858473f, 0.6841235f,
+    0.6824593f, 0.6808543f, 0.6793080f, 0.6778199f, 0.6763896f, 0.6750168f, 0.6737009f, 0.6724416f,
+    0.6712386f, 0.6700914f, 0.6689997f, 0.6679632f, 0.6669814f, 0.6660541f, 0.6651811f, 0.6643621f,
+    0.6635967f, 0.6628848f, 0.6622261f, 0.6616205f, 0.6610677f, 0.6605676f, 0.6601199f, 0.6597246f,
+    0.6593816f, 0.6590906f, 0.6588517f, 0.6586649f, 0.6585300f, 0.6584472f, 0.6584164f, 0.6584377f,
+    0.6585112f, 0.6586369f, 0.6588149f, 0.6590453f, 0.6593283f, 0.6596640f, 0.6600525f, 0.6604941f,
+    0.6609889f, 0.6615372f, 0.6621392f, 0.6627953f, 0.6635058f, 0.6642709f, 0.6650912f, 0.6659668f,
+    0.6668984f, 0.6678864f, 0.6689312f, 0.6700334f, 0.6711936f, 0.6724121f, 0.6736897f, 0.6750269f
+};
+
 //#################################################### GENERIC NOISE CLASS ###########################################################
 
 //Generic and virtual noise class: can be used to create new noises. compute_noise is used by the library to insert the noise in the SDE.
@@ -29,8 +139,13 @@ class NoiseClass{
 
 public:
     
+    //This function has to be override by the child. It is used in the CompFuncManager.
+    //To override in YourNoise: -> return new YourNoise(*this);
+    //To change seed see WienerEuler or WienerMilstein.
+    virtual NoiseClass* clone() const = 0;
+
     //A standard compute noise that simply gives back the passed point in the system space.
-    virtual valarray<float> compute_noise(const valarray<float> &x_i,const float* h);    
+    virtual void compute_noise(const valarray<float> &x_i,const float* h,valarray<float> &x_out);    
 
 };
 
@@ -39,10 +154,12 @@ public:
 //A useful premade class to produce values of a Wiener process simulating dW with an Euler-Maruyama method.
 class WienerEuler: public NoiseClass{
 
-    mt19937 eng; //Random number generator engine.
-    normal_distribution<double> distribution; //Normal standard distribution.
+    PCG32 eng; //Random number generator engine.
     
 public:
+
+    //Cloning function. Used in the CompFuncManager.
+    NoiseClass* clone() const override;
 
     //CONSTRUCTOR: initializes the distribution and random generator.
     //The seed of the random engine is created starting from the time and the point of the instance.
@@ -50,7 +167,7 @@ public:
 
     //Compute a dW kind of step for the Wiener process using the Euler-Maruyama method. 
     //Actually a vector of the same size of the system is returned and, in each slot, there is a different dW. 
-    valarray<float> compute_noise(const valarray<float> &x_i, const float* h) override;
+    void compute_noise(const valarray<float> &x_i, const float* h,valarray<float> &x_out) override;
 
 };
 
@@ -59,11 +176,15 @@ public:
 //A useful premade class to produce values of a Wiener process simulating dW with a Milstein method.
 class WienerMilstein: public NoiseClass{
 
-    mt19937 eng; //Random number generator engine.
-    normal_distribution<double> distribution; //Normal standard distribution.
+    PCG32 eng; //Random number generator engine.
     function<valarray<float>(valarray<float>)> D_g; //The derivative of the field g_function.
 
+    valarray<float> dg_eval; //Preallocation of the valarray used by compute_noise
+
 public:
+
+    //Cloning function. Used in the CompFuncManager.
+    NoiseClass* clone() const override;
 
     //CONSTRUCTOR: the distribution and the generator are initialize. 
     //Moreover, requires as argument the derivative of the g_function used in the field class.
@@ -72,7 +193,7 @@ public:
 
     //Compute a dW kind-of step for the Wiener process using the Milstein method. 
     //Actually a vector of the same size of the system is returned and, at each step there is a different dW. 
-    valarray<float> compute_noise(const valarray<float> &x_i, const float* h) override;
+    void compute_noise(const valarray<float> &x_i, const float* h, valarray<float> &x_out) override;
 
 };
 
@@ -101,8 +222,13 @@ protected:
     void g_function(const valarray<float> &x,float t,valarray<float> &y);
 
     friend class SDE_SS_System;
+    friend class CompFuncManager;
 
 public:
+
+    //This function has to be override by the child. It is used in the CompFuncManager.
+    //To override in YourField: -> return new YourField(*this);
+    virtual FieldClass* clone() const = 0;
 
     //Implementation function for the deterministic part of the field. Override this as in
     //documentation to implement your system.
@@ -113,7 +239,12 @@ public:
     virtual void g_function_impl(const valarray<float> &x,float t,valarray<float> &y) const;
 
     //This function will give the result of the compute_noise of the local NoiseClass.
-    valarray<float> getNoise(const valarray<float> &x_i,const float* h);
+    void getNoise(const valarray<float> &x_i,const float* h, valarray<float> &x_out);
+
+    //This function simply return the pointer to its associated NoiseClass object.
+    NoiseClass* getNoiseClass(){
+        return noise;
+    }
 
 };
 
@@ -170,15 +301,16 @@ public:
 //It is the product of the computeTimePicture function.
 class TimePicture{
 
-    vector<vector<float>> points; //The values of the N simulations at the time instant T. (row,columns)=(trajs,variables).
+    vector<float> points; //The values of the N simulations at the time instant T in a flat 2D matrix. (row,columns)=(trajs,variables).
     size_t N; //The number of simulations.
+    unsigned int n_vars; //The number of variables.
     float T; //The time instant.
 
 public:
 
-    //CONSTRUCTOR 1: build using the 2D array of values and the time instant. The set of values must have the different trajectories
-    //along the rows and the variables along the columns.
-    TimePicture(vector<vector<float>> values,float t);
+    //CONSTRUCTOR 1: build using the flat 2D array of values, the time instant and the number of vars. The set of values must have the 
+    //different trajectories along the rows and the variables along the columns.
+    TimePicture(vector<float> values,float t,unsigned int nv);
 
     //CONSTURCTOR 2: build copying another TimePicture instance.
     TimePicture(const TimePicture& TP);
@@ -186,13 +318,17 @@ public:
     //####################### GET FUNCTIONS ##############################
 
     //Return the reference to the 2D array of the values of the different trajectories at the time instant of the picture.   
-    const vector<vector<float>>& getAllPoints() const{
+    const vector<float>& getAllPoints() const{
         return points;
     }
 
     //Return the reference to the array of the values of a specific trajectory "p" at the time instant of the picture. 
-    const vector<float>& getPoint(size_t p) const{
-        return points[p];
+    const vector<float> getPoint(size_t p) const{
+        vector<float> output(n_vars,0.0f);
+
+        std::memcpy(output.data(),points.data()+p*n_vars,n_vars);
+
+        return output;
     }
 
     //Return the reference to the total number of trajectories composing the TimePicture.
@@ -301,26 +437,12 @@ class SDE_SS_System{
     FieldClass* field; //Field of the system.
     bool bounded{false}; //Is the system bounded?
     function<bool(valarray<float>)> bounds; //the function used to express the bounds of the domain, if present.
-    unsigned int NumThreads{8}; //The number of threads used for the parallelizable operations.
 
     //################### SUPPORT FUNCTIONS #######################
     //Helper functions to simplify the logic of higher-level routines.
 
-    //This function will perform the checks of the parameters of computeTimePicture.
-    void checkFunctionComputeTimePicture(const unsigned int Nsim, const bool random_initial,const vector<vector<float>> &x0,
-                                        const function<vector<float>()>& random_f);
-
     //This function will perform the checks of the parameters of simulateTrajectory. 
     void checkTrajInput(const vector<float> &x0,const float period,const float h_0);
-
-    //This function will perform the checks of the parameters of PDF_1D.
-    void checkFunctionPDF_1D(const unsigned int Nbins,const unsigned int axis,const bool adaptive,const vector<float> &domain);
-
-    //This function will perform the checks of the parameters of PDF_2D.
-    void checkFunctionPDF_2D(const vector<unsigned int> Nbins,const vector<unsigned int> axis,const bool adaptive,const vector<float> &domain);
-
-    //This function will perform the checks of the parameters of computeAutocorrelation.
-    void checkAutocorrelationInput(const Traj& traj,const unsigned int axis,const float tau);
 
     //################### EVOLUTION FUNCTIONS ####################
     //These functions are used to perform the evolutive aspects of the trajectory's computation.
@@ -359,6 +481,60 @@ public:
     //immediately before point).
     SetOfPoints simulateTrajectorySOP(const vector<float> &x0,const float period,const float h_0,const vector<float> &instants);
 
+    //###################### PUBLIC UTILITY FUNCTIONS ##########################
+
+    //This function will set the bound function. The bound function should return a boolean
+    //and has as input a vector<float> (the point). The function should return "true" when
+    //the point is in the domain.
+    //The system has to be bounded (construction) to this function to work.
+    void setBoundFunction(const function<bool(const valarray<float>&)>& f);
+
+    //Given a vector of times and a time index this function will find the slot just before the given time instant.
+    //This function is also STATIC.
+    static size_t findTimeIndex(const vector<float> &times,const float TI);
+    
+};
+
+//############################################# COMPLEX FUNCTIONS MANAGER #######################################################################
+
+//The Complex Function Manager (CompFuncManager) is used to perform in an optimized way complex or heavy function. Most of them requires a lot
+//of simulation. This is done via parallel computing. A reference system features has to be passed to create than copies for each thread.
+//Aside from this, CompFuncManager is a merely box class with some useful yet heavy operations inside.
+class CompFuncManager{
+
+    const float PAR_THR_INDEX{0.1f}; //Ratio Nsim/NumThread threshold to opt parallelization of some functions.
+
+    unsigned int ref_size; //Size of the reference system/problem.
+    FieldClass* ref_field; //Field of the reference system.
+    bool ref_bounded{false}; //Is the reference system bounded?
+    function<bool(valarray<float>)> ref_bounds; //the function used to express the bounds of the domain of the reference system, if present.
+
+    unsigned int NumThreads{8}; //The number of threads used for the parallelizable operations.
+
+    //$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ INTERNAL CHECK FUNCTIONS $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+    //This function will perform the checks of the parameters of computeTimePicture.
+    void checkFunctionComputeTimePicture(const unsigned int Nsim, const bool random_initial,const vector<vector<float>> &x0,
+                                        const function<vector<float>()>& random_f);
+
+    //This function will perform the checks of the parameters of PDF_1D.
+    void checkFunctionPDF_1D(const unsigned int Nbins,const unsigned int axis,const bool adaptive,const vector<float> &domain);
+
+    //This function will perform the checks of the parameters of PDF_2D.
+    void checkFunctionPDF_2D(const vector<unsigned int> Nbins,const vector<unsigned int> axis,const bool adaptive,const vector<float> &domain);
+
+    //This function will perform the checks of the parameters of computeAutocorrelation.
+    void checkAutocorrelationInput(const Traj& traj,const unsigned int axis,const float tau);
+
+public:
+
+    //Constructor: requires the size of the reference system, the Field Class of the reference system
+    //and a bool to say if the reference system is bounded or not. If bounder you need also to pass a
+    //bound function valarray<float>->bool.
+    CompFuncManager(unsigned int N,FieldClass* F,bool isBounded=false,const function<bool(const valarray<float>&)>& f); 
+
+    //$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ TOOL FUNCTIONS $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
     //This function will automatically produce a group of the trajectories to obtain the value in a time instant. 
     //It requires, in order,:
     //- The period, the step size and the number of trajectories (MANDATORY).
@@ -369,29 +545,10 @@ public:
     //  a zero argument - returning vector<float> function.
     //- Eventually, a time index where the PDF has to be computed. If it is not given, the PDF will be computed
     //  at the last step.
-    //The output of the function will be a 2D matrix with the values of each trajectory at the time instant in each row.     
+    //The output of the function will be a TimePicture class object.     
     TimePicture produceTimePicture(const float period,const float h_0,unsigned int Nsim,
-                                            const bool random_initial=false,const vector<vector<float>> &x0 = {{}},
-                                            const function<vector<float>()>& random_f = nullptr,const float time_instant = -1.0f);
-
-    //###################### PUBLIC UTILITY FUNCTIONS ##########################
-
-    //This function will set the bound function. The bound function should return a boolean
-    //and has as input a vector<float> (the point). The function should return "true" when
-    //the point is in the domain.
-    //The system has to be bounded (construction) to this function to work.
-    void setBoundFunction(const function<bool(const valarray<float>&)>& f);
-
-    //This function is used to set the number of threads used by the heavy functions of the class.
-    //The standard value is 8.
-    void setNumThreads(unsigned int N);
-
-    //Given a vector of times and a time index this function will find the slot just before the given time instant.
-    //This function is also STATIC.
-    static size_t findTimeIndex(const vector<float> &times,const float TI);
-
-    //####################### TOOL FUNCTIONS #####################################
-    //These function are made to automatize some typical tests and procedure used in the analysis of the SDE.
+                                   const bool random_initial=false,const vector<vector<float>> &x0 = {{}},
+                                   const function<vector<float>()>& random_f = nullptr,const float time_instant = -1.0f);
 
     //This function will produce starting from a TimePicture such the one produced by "produceTimePicture" a 1D bin
     //system useful to obtain PDFs. This function require:
@@ -401,9 +558,10 @@ public:
     //- A bool to express if the binning domain is given or adaptive (true = adaptive).
     //- If false a vector with upper and lower domain is required.
     //The function will return a 2D vector with in each row the central value (first column) and the bin value (second column).
+    //If there are too much threads than simulations (less than 10 simulation per thread) the code will be executed serially!!!
     vector<vector<float>> PDF_1D(const TimePicture& picture,unsigned int Nbins,unsigned int axis,
                                 bool adaptive = false,vector<float> domain = {0.0,0.0}); 
-    
+
     //This function will produce starting from a Time Picutre such the one produced by "produceTimePicture" a 2D bin
     //system useful to obtain PDFs, This function require:
     //- A TimePicture (MANDATORY).
@@ -412,6 +570,7 @@ public:
     //- A bool to express if the binning domain is given or adaptive (true = adaptive).
     //- If false a vector with upper and lower domain is required. It should be a 4 slot vector (lb,ub,lb,ub).
     //The function will return a 2D vector with in each row the central value coordinates (firsts 2 column) and the bin value (last column).
+    //If there are too much threads than simulations (less than 10 simulation per thread) the code will be executed serially!!!
     vector<vector<float>> PDF_2D(const TimePicture& picture,vector<unsigned int> Nbins,vector<unsigned int> axis,
                                 bool adaptive = false, vector<float> domain = {0.0,0.0,0.0,0.0});
 
@@ -422,8 +581,19 @@ public:
     //- The time delay (tau) of the autocorrelation (MANDATORY).
     //The output will be the autocorrelation value computed as covariance/variance.
     //Also the time delay is converted in the nearest below number of steps.
+    //If there are too much threads than simulations (less than 10 simulation per thread) the code will be executed serially!!!
     float computeAutocorrelation(const Traj& traj,unsigned int axis,float tau);
-    
+
+    //$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ UTILITY FUNCTIONS $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+    //This function is used to set the number of threads used by the heavy functions of the class.
+    //The standard value is 8.
+    void setNumThreads(unsigned int N);
+
+    //Given a vector of times and a time index this function will find the slot just before the given time instant.
+    //This function is also STATIC.
+    static size_t findTimeIndex(const vector<float> &times,const float TI);
+
 };
 
 #endif

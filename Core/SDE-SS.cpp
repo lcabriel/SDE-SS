@@ -46,35 +46,6 @@ vector<float> operator*(const vector<float>& a,const vector<float>& b) {
     return result;
 }
 
-//####################################################################################################################################################
-
-//Generate a gaussian distributed number using the Ziggurat Algorithm.
-float PCG32::nextGaussian(){
-    for (;;) {
-        uint32_t u = next();
-        int32_t i = u & 127; // Choose one of the blocks
-        
-        // If the number falls in the internal part of the block, return it.
-        if (u < zig_kn[i]) return static_cast<float>(u) * zig_wn[i];
-
-        // Otherwise, manage the blocks border or the tail situation.
-        if (i == 0) {
-            float x, y;
-            do {
-                x = -logf(nextFloat()) * 0.2904764f;
-                y = -logf(nextFloat());
-            } while (y + y < x * x);
-            return (u & 128) ? (3.442620f + x) : -(3.442620f + x);
-        }
-
-        //Refinement for the block borders
-        float x = static_cast<float>(u) * zig_wn[i];
-        if (zig_fn[i] + nextFloat() * (zig_fn[i - 1] - zig_fn[i]) < expf(-0.5f * x * x)) {
-            return x;
-        }
-    }    
-}
-
 //##############################################################################################################################################################
 //############################################################# GENERIC NOISE CLASS ########################################################################################
 //##############################################################################################################################################################
@@ -97,6 +68,7 @@ WienerEuler::WienerEuler():
 void WienerEuler::compute_noise(const valarray<float>& x_i,const float* h,valarray<float> &x_out){
     for(size_t i=0;i<x_i.size();i++){ //dW -> N(0,1)*sqrt(h)
         x_out[i] = eng.nextGaussian()*sqrt(*h);
+        cout << eng.nextGaussian() << endl;
     }
 }
 

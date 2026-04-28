@@ -626,7 +626,7 @@ size_t SDE_SS_System::findTimeIndex(const vector<float> &times,const float TI){
 //Constructor: requires the size of the reference system, the Field Class of the reference system
 //and a bool to say if the reference system is bounded or not. If bounder you need also to pass a
 //bound function valarray<float>->bool.
-CompFuncManager::CompFuncManager(unsigned int N,FieldClass* F,bool isBounded=false,const function<bool(const valarray<float>&)>& f = nullptr):
+CompFuncManager::CompFuncManager(unsigned int N,FieldClass* F,bool isBounded,const function<bool(const valarray<float>&)>& f):
     ref_field(F),ref_bounded(isBounded),ref_size(N){
         //Check if the size of the problem is meaningful
         if(F == nullptr) error("CompFuncManager: Constructor: Runtime error: Passed FieldClass is invalid (nullptr).");
@@ -979,7 +979,7 @@ float CompFuncManager::computeAutocorrelation(const Traj& traj,unsigned int axis
 
     //2. We need then to compute the time mean of the trajectory for the axis
     float mean{0.0f};
-    #pragma omp parallel for reduction(+:mean) if(traj.getLenght()/NumThreads>=PAR_THR_INDEX)
+    #pragma omp parallel for reduction(+:mean) if(traj.getLength()/NumThreads>=PAR_THR_INDEX)
     for(size_t i=0;i<traj.getLength();i++){
         mean += traj.getVars()[traj.flatNotation(i,axis)];
     }

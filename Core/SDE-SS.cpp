@@ -68,7 +68,6 @@ WienerEuler::WienerEuler():
 void WienerEuler::compute_noise(const valarray<float>& x_i,const float* h,valarray<float> &x_out){
     for(size_t i=0;i<x_i.size();i++){ //dW -> N(0,1)*sqrt(h)
         x_out[i] = eng.nextGaussian()*sqrt(*h);
-        cout << eng.nextGaussian() << endl;
     }
 }
 

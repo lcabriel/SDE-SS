@@ -284,6 +284,11 @@ public:
     //documentation to implement your system.
     virtual void g_function_impl(const valarray<float> &x,float t,valarray<float> &y) const;
 
+    //This function is optional and has not to be implemented. Can be override to add some
+    //procedure that must not be done inside the RK4 steps but only at the beggining
+    //(e.g. sorting a common random variable for the RK4 steps).
+    virtual void start_step_procedure(const valarray<float> &x,float t){}
+
     //This function will give the result of the compute_noise of the local NoiseClass.
     void getNoise(const valarray<float> &x_i,const float* h, valarray<float> &x_out);
 

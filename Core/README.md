@@ -52,6 +52,9 @@ by the other classes of the library. To see how to override these two, please lo
 	of your field that you should have set at construction.
 - *FieldClass\* clone() const*: this function must be implemented by you in your class in certain precise way. Please copy how it is done inside the tests we have
     provided you inside the TestCodes subdirectory. 
+- *void start_step_procedure(const valarray&lt;float&gt; &x,float t)*: This function it is optional and can be overridden by the user. In some situations could be
+	useful to implement some pre-evolution procedure at each step. The most common case is when a parameter is stochastic but must be the same throughout the 4
+	call of the RK4 method. This function tackles this kind of problems.
 
 ## Trajectory ("Traj"):
 

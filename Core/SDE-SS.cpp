@@ -324,6 +324,9 @@ SDE_SS_System::SDE_SS_System(unsigned int N,FieldClass* F,bool isBounded):
 void SDE_SS_System::evolveTraj(const valarray<float> &x_n,float h,float t,vector<valarray<float>> &k,
     valarray<float> &x_next,valarray<float> &g,valarray<float> &n,valarray<float> &x_temp){
 
+    //0. Perform, if defined, the procedures required before each step by the field.
+    field->start_step_procedure(x_n,t);
+
     //1. We simulate the deterministic part of the field with RK4 for half step
     //Now we compute X^1 (the first intermediate step)
     RK4_method(x_n,h/2,t,k,x_next);
